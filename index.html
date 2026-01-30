@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Thr33s - Web3 Threes</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <div class="header-left">
+          <h1 class="logo">Thr33s</h1>
+        </div>
+        <div class="header-center">
+          <div class="score-display">
+            <span class="score-label">Score</span>
+            <span class="score-value" id="score">0</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <button class="btn btn-icon" id="leaderboard-btn" title="Leaderboard">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10M12 20V4M6 20v-6"/>
+            </svg>
+          </button>
+          <button class="btn btn-primary" id="wallet-btn">Connect Wallet</button>
+        </div>
+      </header>
+
+      <main class="game-container">
+        <div class="next-tile-container">
+          <span class="next-label">Next</span>
+          <div class="next-tile-preview" id="next-tile"></div>
+        </div>
+
+        <div class="board-wrapper">
+          <div class="game-board" id="game-board">
+            <!-- Tiles will be rendered here -->
+          </div>
+        </div>
+
+        <div class="controls-hint">
+          <span>Swipe or use arrow keys to move</span>
+        </div>
+      </main>
+
+      <div id="modals"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

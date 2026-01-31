@@ -141,17 +141,17 @@ jobs:
           const CID_CONFIG = { version: 1, codec: 0x55, hashCode: 0x12, hashLength: 32 };
 
           const RPC_ENDPOINTS = [
-            "wss://asset-hub-paseo.dotters.network",
-            "wss://sys.ibp.network/asset-hub-paseo",
+            "wss://passet-hub-paseo.ibp.network",
+            "wss://paseo-asset-hub-rpc.polkadot.io",
           ];
 
           const CONTRACTS = {
-            DOTNS_REGISTRAR: "0x329aAA5b6bEa94E750b2dacBa74Bf41291E6c2BD",
-            DOTNS_REGISTRAR_CONTROLLER: "0xd09e0F1c1E6CE8Cf40df929ef4FC778629573651",
-            DOTNS_REGISTRY: "0x4Da0d37aBe96C06ab19963F31ca2DC0412057a6f",
-            DOTNS_RESOLVER: "0x95645C7fD0fF38790647FE13F87Eb11c1DCc8514",
-            DOTNS_CONTENT_RESOLVER: "0x7756DF72CBc7f062e7403cD59e45fBc78bed1cD7",
-            POP_RULES: "0x4e8920B1E69d0cEA9b23CBFC87A17Ee6fE02d2d3",
+            DOTNS_REGISTRAR: "0x68cE3f3b3819279861CcEf1d703Aa358b4993650",
+            DOTNS_REGISTRAR_CONTROLLER: "0x2CB1dE90013C55f779Ca6894a66142571e1af41D",
+            DOTNS_REGISTRY: "0xd31ACEFD8E40078375BFF392805BBc0301f0aF4A",
+            DOTNS_RESOLVER: "0x34196DC986e600bDDbb5F43BF77D8cBe6ad05b20",
+            DOTNS_CONTENT_RESOLVER: "0xb3d23aDC08dc3bb8b1130579e81449afbA5cc3c2",
+            POP_ORACLE: "0xdE40254fF6470CE8b6683d2FCFD0599B2BcfC3Af",
           };
 
           const DECIMALS = 12n;
@@ -277,7 +277,7 @@ jobs:
             { inputs: [{ name: "node", type: "bytes32" }, { name: "hash", type: "bytes" }], name: "setContenthash", outputs: [], stateMutability: "nonpayable", type: "function" },
           ];
 
-          const POP_RULES_ABI = [
+          const POP_ORACLE_ABI = [
             { inputs: [{ name: "name", type: "string" }], name: "price", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
             { inputs: [{ name: "", type: "address" }], name: "userPopStatus", outputs: [{ name: "", type: "uint8" }], stateMutability: "view", type: "function" },
             { inputs: [{ name: "status", type: "uint8" }], name: "setUserPopStatus", outputs: [], stateMutability: "nonpayable", type: "function" },
@@ -383,7 +383,7 @@ jobs:
               // Set PoP status to none (0)
               console.log(`   Setting PoP status...`);
               try {
-                await this.contractTransaction(CONTRACTS.POP_RULES, 0n, POP_RULES_ABI, "setUserPopStatus", [0]);
+                await this.contractTransaction(CONTRACTS.POP_ORACLE, 0n, POP_ORACLE_ABI, "setUserPopStatus", [0]);
               } catch (e) { console.log(`   PoP status already set or error: ${e.message}`); }
 
               // Generate commitment
@@ -403,7 +403,7 @@ jobs:
               await new Promise(r => setTimeout(r, waitSecs * 1000));
 
               // Get price and register
-              const price = await this.contractCall(CONTRACTS.POP_RULES, POP_RULES_ABI, "price", [label]);
+              const price = await this.contractCall(CONTRACTS.POP_ORACLE, POP_ORACLE_ABI, "price", [label]);
               const paymentWei = (price * 110n) / 100n;
               const paymentNative = convertWeiToNative(paymentWei);
               console.log(`   Registering ${label}.dot for ${formatEther(paymentWei)} PAS...`);

@@ -421,7 +421,7 @@ jobs:
             disconnect() { if (this.client) this.client.destroy(); }
           }
 
-          // Main deploy function
+          // Main deploy function - uses IPFS CID directly (no Bulletin storage)
           export async function deploy(buildDir, domainName, mnemonic) {
             console.log("\n" + "=".repeat(60));
             console.log("DEPLOYING TO POLKADOT");
@@ -429,19 +429,15 @@ jobs:
             console.log(`   Domain: ${domainName}.dot`);
             console.log(`   Build dir: ${path.resolve(buildDir)}`);
 
-            // Merkleize and store
+            // Merkleize to get IPFS CID
             console.log("\n" + "=".repeat(60));
-            console.log("Storage");
+            console.log("IPFS");
             console.log("=".repeat(60));
             const carPath = path.join(path.dirname(buildDir), "build.car");
             const { cid: ipfsCid } = await merkleize(buildDir, carPath);
             console.log(`   IPFS CID: ${ipfsCid}`);
 
-            const carBuffer = fs.readFileSync(carPath);
-            const storageCid = await storeToBlockchain(carBuffer, mnemonic);
-            console.log(`   Storage CID: ${storageCid}`);
-
-            // DotNS
+            // DotNS - register domain and set contenthash
             console.log("\n" + "=".repeat(60));
             console.log("DotNS");
             console.log("=".repeat(60));
@@ -456,7 +452,7 @@ jobs:
               console.log(`   Domain already owned`);
             }
 
-            const contenthash = `0x${encodeContenthash(storageCid)}`;
+            const contenthash = `0x${encodeContenthash(ipfsCid)}`;
             await dotns.setContenthash(domainName, contenthash);
             dotns.disconnect();
 
@@ -466,7 +462,7 @@ jobs:
             console.log(`\n   Main: https://${domainName}.paseo.li`);
             console.log(`   Alt:  https://${domainName}.bigtava.online\n`);
 
-            return { cid: storageCid, ipfsCid, domain: domainName };
+            return { cid: ipfsCid, ipfsCid, domain: domainName };
           }
           DEPLOY_EOF
 

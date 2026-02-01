@@ -83,6 +83,7 @@ jobs:
             "dependencies": {
               "@ipld/dag-pb": "^4.1.3",
               "@noble/hashes": "^1.7.2",
+              "@polkadot-api/descriptors": "^1.0.0",
               "@polkadot-api/substrate-bindings": "^0.16.5",
               "@polkadot-labs/hdkd": "^0.0.25",
               "@polkadot-labs/hdkd-helpers": "^0.0.26",
@@ -141,8 +142,8 @@ jobs:
           const CID_CONFIG = { version: 1, codec: 0x55, hashCode: 0x12, hashLength: 32 };
 
           const RPC_ENDPOINTS = [
-            "wss://sys.ibp.network/asset-hub-paseo",
             "wss://asset-hub-paseo-rpc.n.dwellir.com",
+            "wss://sys.ibp.network/asset-hub-paseo",
           ];
 
           const CONTRACTS = {
@@ -291,6 +292,11 @@ jobs:
               console.log(`   Connecting to: ${rpc}`);
               this.client = createClient(getWsProvider(rpc));
               this.unsafeApi = this.client.getUnsafeApi();
+
+              // Wait for client to sync with chain
+              console.log(`   Waiting for chain sync...`);
+              await new Promise(r => setTimeout(r, 5000));
+
               await cryptoWaitReady();
               const keyring = new Keyring({ type: "sr25519" });
               const account = keyring.addFromMnemonic(mnemonic);
@@ -401,6 +407,13 @@ jobs:
               const waitSecs = Number(minAge) + 10;
               console.log(`   Waiting ${waitSecs}s for commitment to mature...`);
               await new Promise(r => setTimeout(r, waitSecs * 1000));
+
+              // Reconnect to get fresh block info (prevents AncientBirthBlock error)
+              console.log(`   Refreshing connection...`);
+              this.client.destroy();
+              this.client = createClient(getWsProvider(RPC_ENDPOINTS[0]));
+              this.unsafeApi = this.client.getUnsafeApi();
+              await new Promise(r => setTimeout(r, 3000));
 
               // Get price and register
               const price = await this.contractCall(CONTRACTS.DOTNS_RULES, DOTNS_RULES_ABI, "price", [label]);

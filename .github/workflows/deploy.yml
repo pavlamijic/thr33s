@@ -141,8 +141,8 @@ jobs:
           const CID_CONFIG = { version: 1, codec: 0x55, hashCode: 0x12, hashLength: 32 };
 
           const RPC_ENDPOINTS = [
-            "wss://passet-hub-paseo.ibp.network",
             "wss://paseo-asset-hub-rpc.polkadot.io",
+            "wss://sys.ibp.network/asset-hub-paseo",
           ];
 
           const CONTRACTS = {

@@ -15,18 +15,33 @@ function getTilePosition(row: number, col: number): { left: number; top: number 
 }
 
 // Create a tile DOM element
-function createTileElement(value: TileValue, row: number, col: number): HTMLElement {
+function createTileElement(value: TileValue, row: number, col: number, isHighest: boolean = false): HTMLElement {
   const tile = document.createElement('div');
-  tile.className = `tile ${getTileClass(value)}`;
+  tile.className = `tile ${getTileClass(value)}${isHighest ? ' highest' : ''}`;
   tile.textContent = value.toString();
   tile.dataset.row = row.toString();
   tile.dataset.col = col.toString();
+  tile.dataset.value = value.toString();
 
   const pos = getTilePosition(row, col);
   tile.style.left = `${pos.left}px`;
   tile.style.top = `${pos.top}px`;
 
   return tile;
+}
+
+// Find the highest tile value on the board (only tiles > 3)
+function findHighestValue(board: Board): number {
+  let highest = 0;
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      const value = board[row][col];
+      if (value > 3 && value > highest) {
+        highest = value;
+      }
+    }
+  }
+  return highest;
 }
 
 // Create empty cell background elements
@@ -71,12 +86,16 @@ export class GameRenderer {
     this.tiles.forEach((tile) => tile.remove());
     this.tiles.clear();
 
+    // Find the highest value on the board
+    const highestValue = findHighestValue(board);
+
     // Create new tiles
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
         const value = board[row][col];
         if (value !== 0) {
-          const tile = createTileElement(value, row, col);
+          const isHighest = value > 3 && value === highestValue;
+          const tile = createTileElement(value, row, col, isHighest);
           this.boardElement.appendChild(tile);
           this.tiles.set(this.getTileKey(row, col), tile);
         }

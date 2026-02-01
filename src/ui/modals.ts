@@ -99,13 +99,17 @@ export function showGameOverModal(
 export function showLeaderboardModal(
   entries: LeaderboardEntry[],
   currentAddress: string | null,
-  personalBest: number | null
+  personalBest: number | null,
+  getDisplayName?: (address: string) => string
 ): ModalCloseCallback {
   const modalsContainer = document.getElementById('modals')!;
 
   const overlay = createModalOverlay();
   const modal = document.createElement('div');
   modal.className = 'modal';
+
+  // Use provided display name function or fallback to truncate
+  const displayName = getDisplayName || truncateAddress;
 
   const entriesHtml = entries.length === 0
     ? '<p>No scores yet. Be the first!</p>'
@@ -123,9 +127,9 @@ export function showLeaderboardModal(
           ${entries
             .map(
               (entry) => `
-              <tr class="${entry.address === currentAddress ? 'highlight' : ''}">
+              <tr class="${entry.address.toLowerCase() === currentAddress?.toLowerCase() ? 'highlight' : ''}">
                 <td>${entry.rank}</td>
-                <td class="leaderboard-address">${truncateAddress(entry.address)}</td>
+                <td class="leaderboard-player">${displayName(entry.address)}</td>
                 <td>${entry.score}</td>
                 <td>${entry.highestTile}</td>
               </tr>
@@ -320,6 +324,153 @@ export function showSuccessModal(
   modalsContainer.appendChild(overlay);
 
   const closeBtn = modal.querySelector('#success-close-btn');
+  closeBtn?.addEventListener('click', close);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      close();
+    }
+  });
+
+  function close() {
+    overlay.remove();
+  }
+
+  return close;
+}
+
+// Show set alias modal
+export function showSetAliasModal(
+  currentAddress: string,
+  currentAlias: string | null,
+  onSave: (alias: string) => void
+): ModalCloseCallback {
+  const modalsContainer = document.getElementById('modals')!;
+
+  const overlay = createModalOverlay();
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  modal.innerHTML = `
+    <h2>Set Your Alias</h2>
+    <p class="alias-hint">Choose a nickname to display on the leaderboard instead of your address.</p>
+    <div class="alias-input-container">
+      <input
+        type="text"
+        id="alias-input"
+        class="alias-input"
+        placeholder="Enter alias (max 20 chars)"
+        maxlength="20"
+        value="${currentAlias || ''}"
+      />
+      <div class="alias-preview">
+        <span class="alias-preview-label">Preview:</span>
+        <span id="alias-preview-text">${currentAlias || truncateAddress(currentAddress)}</span>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-primary" id="save-alias-btn">Save</button>
+      <button class="btn btn-secondary" id="cancel-alias-btn">Cancel</button>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  modalsContainer.appendChild(overlay);
+
+  const input = modal.querySelector('#alias-input') as HTMLInputElement;
+  const previewText = modal.querySelector('#alias-preview-text')!;
+  const saveBtn = modal.querySelector('#save-alias-btn')!;
+  const cancelBtn = modal.querySelector('#cancel-alias-btn')!;
+
+  // Update preview as user types
+  input.addEventListener('input', () => {
+    const value = input.value.trim();
+    previewText.textContent = value || truncateAddress(currentAddress);
+  });
+
+  // Focus input
+  setTimeout(() => input.focus(), 100);
+
+  // Save handler
+  saveBtn.addEventListener('click', () => {
+    onSave(input.value.trim());
+    close();
+  });
+
+  // Cancel handler
+  cancelBtn.addEventListener('click', close);
+
+  // Enter key to save
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      onSave(input.value.trim());
+      close();
+    }
+    if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      close();
+    }
+  });
+
+  function close() {
+    overlay.remove();
+  }
+
+  return close;
+}
+
+// Show instructions/help modal
+export function showInstructionsModal(): ModalCloseCallback {
+  const modalsContainer = document.getElementById('modals')!;
+
+  const overlay = createModalOverlay();
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  modal.innerHTML = `
+    <h2>How to Play</h2>
+    <div class="instructions-content">
+      <div class="instruction-item">
+        <div class="instruction-tiles">
+          <span class="mini-tile blue">1</span>
+          <span class="instruction-plus">+</span>
+          <span class="mini-tile red">2</span>
+          <span class="instruction-equals">=</span>
+          <span class="mini-tile white">3</span>
+        </div>
+        <p>1 and 2 combine to make 3</p>
+      </div>
+      <div class="instruction-item">
+        <div class="instruction-tiles">
+          <span class="mini-tile white">3</span>
+          <span class="instruction-plus">+</span>
+          <span class="mini-tile white">3</span>
+          <span class="instruction-equals">=</span>
+          <span class="mini-tile white">6</span>
+        </div>
+        <p>Matching numbers (3+) combine into their sum</p>
+      </div>
+      <div class="instruction-item">
+        <p><strong>Swipe</strong> or use <strong>arrow keys</strong> to push all tiles against a wall.</p>
+      </div>
+      <div class="instruction-item">
+        <p>A new tile appears after each move. Keep combining to reach higher numbers!</p>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-primary" id="instructions-close-btn">Got it!</button>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  modalsContainer.appendChild(overlay);
+
+  const closeBtn = modal.querySelector('#instructions-close-btn');
   closeBtn?.addEventListener('click', close);
 
   overlay.addEventListener('click', (e) => {

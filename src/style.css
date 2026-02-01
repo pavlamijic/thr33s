@@ -59,24 +59,44 @@ html, body {
   justify-content: space-between;
   padding: 8px 0;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
-.header-left, .header-right {
+.header-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin: 0 8px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .logo {
   font-size: 24px;
   font-weight: 700;
   color: var(--text-color);
+  white-space: nowrap;
 }
 
 .score-display {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: 60px;
 }
 
 .score-label {
@@ -123,15 +143,26 @@ html, body {
 }
 
 .btn-icon {
-  padding: 8px;
+  padding: 6px;
   background-color: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--border-radius);
 }
 
 .btn-icon:hover {
   opacity: 0.7;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.btn-icon svg {
+  display: block;
 }
 
 /* Game container */
@@ -249,6 +280,11 @@ html, body {
   background-color: var(--tile-bonus);
   color: var(--tile-bonus-text);
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+/* Highest tile(s) on the board - red font */
+.tile.highest {
+  color: #e63946 !important;
 }
 
 /* Tile entering animation */
@@ -481,4 +517,238 @@ html, body {
   .tile {
     font-size: 20px;
   }
+}
+
+/* Tutorial styles */
+.tutorial-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+  transition: opacity 0.3s ease;
+}
+
+.tutorial-message-container {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 16px;
+  padding: 40px 30px;
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tutorial-message {
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 30px 0;
+  line-height: 1.4;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tutorial-fade-in {
+  animation: tutorialFadeIn 0.3s ease-out;
+}
+
+@keyframes tutorialFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tutorial-next-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 14px 28px;
+  border-radius: 25px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+.tutorial-next-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+}
+
+.tutorial-next-btn:active {
+  transform: scale(0.98);
+}
+
+.tutorial-skip-btn {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  border: none;
+  padding: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.tutorial-skip-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Sound toggle button */
+.sound-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.sound-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.sound-toggle.muted {
+  opacity: 0.5;
+}
+
+/* Instructions modal */
+.instructions-content {
+  text-align: left;
+  margin: 16px 0;
+}
+
+.instruction-item {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--board-color);
+}
+
+.instruction-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.instruction-item p {
+  margin: 8px 0 0 0;
+  color: var(--text-light);
+  font-size: 14px;
+}
+
+.instruction-tiles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mini-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mini-tile.blue {
+  background-color: var(--tile-blue);
+  color: var(--tile-blue-text);
+}
+
+.mini-tile.red {
+  background-color: var(--tile-red);
+  color: var(--tile-red-text);
+}
+
+.mini-tile.white {
+  background-color: var(--tile-white);
+  color: var(--tile-white-text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.instruction-plus,
+.instruction-equals {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+/* Alias modal */
+.alias-hint {
+  font-size: 14px;
+  color: var(--text-light);
+  margin-bottom: 16px;
+}
+
+.alias-input-container {
+  margin-bottom: 20px;
+}
+
+.alias-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: 2px solid var(--board-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.alias-input:focus {
+  border-color: var(--text-color);
+}
+
+.alias-preview {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: var(--border-radius);
+  font-size: 14px;
+}
+
+.alias-preview-label {
+  color: var(--text-light);
+  margin-right: 8px;
+}
+
+#alias-preview-text {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+/* Leaderboard player name */
+.leaderboard-player {
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

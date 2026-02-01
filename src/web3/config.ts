@@ -19,8 +19,8 @@ export const CONFIG = {
   // Block explorer
   blockExplorer: 'https://blockscout-testnet.polkadot.io/',
 
-  // Contract address (to be updated after deployment)
-  contractAddress: '0x0000000000000000000000000000000000000000' as Address,
+  // Contract address (deployed on Polkadot Hub TestNet)
+  contractAddress: '0xC295A8b2D1E3fb8e70FaEc85eD6140060f36f2F5' as Address,
 
   // App name for wallet connection
   appName: 'Thr33s',

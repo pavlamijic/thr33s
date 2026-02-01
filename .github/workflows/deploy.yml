@@ -157,7 +157,6 @@ jobs:
 
           const DECIMALS = 12n;
           const NATIVE_TO_ETH_RATIO = 1_000_000n;
-          const DEFAULT_MNEMONIC = "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
           const DOT_NODE = "0x3fce7d1364a893e213bc4212792b517ffc88f5b13b86c8ef9c8d390c3a1370ce";
 
           function createCID(data, codec = CID_CONFIG.codec, hashCode = CID_CONFIG.hashCode) {
@@ -489,11 +488,16 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          node --input-type=module -e "
+          node --max-old-space-size=4096 --input-type=module -e "
           import { deploy } from './deploy-scripts/deploy.js';
 
-          const mnemonic = process.env.MNEMONIC || 'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
+          const mnemonic = process.env.MNEMONIC;
+          if (!mnemonic) {
+            console.error('ERROR: MNEMONIC secret is not set');
+            process.exit(1);
+          }
           console.log('Mnemonic word count:', mnemonic.split(' ').length);
           const result = await deploy('dist', '${{ env.DOMAIN_NAME }}', mnemonic);
 

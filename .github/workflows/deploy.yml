@@ -117,8 +117,7 @@ jobs:
           import * as dagPB from "@ipld/dag-pb";
           import { UnixFS } from "ipfs-unixfs";
           import crypto from "crypto";
-          import { createClient } from "polkadot-api";
-          import { Keyring } from "@polkadot/keyring";
+                    import { Keyring } from "@polkadot/keyring";
           import { cryptoWaitReady } from "@polkadot/util-crypto";
           import {
             encodeFunctionData,
@@ -289,12 +288,12 @@ jobs:
             async connect(mnemonic) {
               const rpc = RPC_ENDPOINTS[0];
               console.log(`   Connecting to: ${rpc}`);
-              this.client = createClient(getWsProvider(rpc));
+              this.client = createPolkadotClient(withPolkadotSdkCompat(getWsProvider(rpc)));
               this.unsafeApi = this.client.getUnsafeApi();
 
               // Wait for client to sync with chain
               console.log(`   Waiting for chain sync...`);
-              await new Promise(r => setTimeout(r, 5000));
+              await new Promise(r => setTimeout(r, 8000));
 
               await cryptoWaitReady();
               const keyring = new Keyring({ type: "sr25519" });
@@ -340,7 +339,7 @@ jobs:
               try {
                 const mappingTx = this.unsafeApi.tx.Revive.map_account();
                 await new Promise((resolve, reject) => {
-                  const sub = mappingTx.signSubmitAndWatch(this.signer).subscribe({
+                  const sub = mappingTx.signSubmitAndWatch(this.signer, { mortality: { mortal: true, period: 256 } }).subscribe({
                     next: (e) => { if (e.type === "finalized") { sub.unsubscribe(); resolve(); } },
                     error: (e) => {
                       sub.unsubscribe();
@@ -362,7 +361,7 @@ jobs:
               });
 
               return new Promise((resolve, reject) => {
-                const sub = tx.signSubmitAndWatch(this.signer).subscribe({
+                const sub = tx.signSubmitAndWatch(this.signer, { mortality: { mortal: true, period: 256 } }).subscribe({
                   next: (event) => {
                     if (event.type === "finalized") {
                       if (event.dispatchError) reject(new Error(`Transaction failed`));
@@ -410,9 +409,9 @@ jobs:
               // Reconnect to get fresh block info (prevents AncientBirthBlock error)
               console.log(`   Refreshing connection...`);
               this.client.destroy();
-              this.client = createClient(getWsProvider(RPC_ENDPOINTS[0]));
+              this.client = createPolkadotClient(withPolkadotSdkCompat(getWsProvider(RPC_ENDPOINTS[0])));
               this.unsafeApi = this.client.getUnsafeApi();
-              await new Promise(r => setTimeout(r, 3000));
+              await new Promise(r => setTimeout(r, 8000));
 
               // Get price and register
               const price = await this.contractCall(CONTRACTS.DOTNS_RULES, DOTNS_RULES_ABI, "price", [label]);

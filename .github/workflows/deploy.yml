@@ -83,7 +83,6 @@ jobs:
             "dependencies": {
               "@ipld/dag-pb": "^4.1.3",
               "@noble/hashes": "^1.7.2",
-              "@polkadot-api/descriptors": "^1.0.0",
               "@polkadot-api/substrate-bindings": "^0.16.5",
               "@polkadot-labs/hdkd": "^0.0.25",
               "@polkadot-labs/hdkd-helpers": "^0.0.26",

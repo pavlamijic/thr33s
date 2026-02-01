@@ -406,13 +406,6 @@ jobs:
               console.log(`   Waiting ${waitSecs}s for commitment to mature...`);
               await new Promise(r => setTimeout(r, waitSecs * 1000));
 
-              // Reconnect to get fresh block info (prevents AncientBirthBlock error)
-              console.log(`   Refreshing connection...`);
-              this.client.destroy();
-              this.client = createPolkadotClient(withPolkadotSdkCompat(getWsProvider(RPC_ENDPOINTS[0])));
-              this.unsafeApi = this.client.getUnsafeApi();
-              await new Promise(r => setTimeout(r, 8000));
-
               // Get price and register
               const price = await this.contractCall(CONTRACTS.DOTNS_RULES, DOTNS_RULES_ABI, "price", [label]);
               const paymentWei = (price * 110n) / 100n;

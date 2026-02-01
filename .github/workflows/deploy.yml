@@ -471,6 +471,18 @@ jobs:
         working-directory: deploy-scripts
         run: npm install
 
+      - name: Debug secret
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          MNEMONIC: ${{ secrets.MNEMONIC }}
+        run: |
+          if [ -z "$MNEMONIC" ]; then
+            echo "::warning::MNEMONIC secret is NOT set or is empty!"
+            echo "Using default dev mnemonic"
+          else
+            echo "MNEMONIC is set (length: ${#MNEMONIC} chars, words: $(echo $MNEMONIC | wc -w))"
+          fi
+
       - name: Deploy to DotNS
         id: deploy
         if: steps.cache.outputs.cache-hit != 'true'
@@ -481,6 +493,7 @@ jobs:
           import { deploy } from './deploy-scripts/deploy.js';
 
           const mnemonic = process.env.MNEMONIC || 'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
+          console.log('Mnemonic word count:', mnemonic.split(' ').length);
           const result = await deploy('dist', '${{ env.DOMAIN_NAME }}', mnemonic);
 
           const fs = await import('fs');

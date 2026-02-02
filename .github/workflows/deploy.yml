@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DOMAIN_NAME: playthr33s
+  DOMAIN_NAME: playthrees33
 
 jobs:
   build-and-deploy:

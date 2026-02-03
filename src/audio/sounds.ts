@@ -49,10 +49,51 @@ export function playSwoosh(): void {
   oscillator.stop(ctx.currentTime + 0.15);
 }
 
-// Match sound for 1+2 combining
+// Match sound for 1+2 combining - soft woosh
 export function playMatch12(): void {
   const ctx = getAudioContext();
   if (ctx.state === 'suspended') return;
+
+  // Create noise-based woosh using oscillator with fast frequency sweep
+  const oscillator = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  oscillator.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(ctx.destination);
+
+  // Bandpass filter for softer woosh character
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(1000, ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.12);
+  filter.Q.value = 1;
+
+  // Quick frequency sweep down for woosh effect
+  oscillator.type = 'triangle';
+  oscillator.frequency.setValueAtTime(600, ctx.currentTime);
+  oscillator.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.12);
+
+  // Quick fade in and out
+  gainNode.gain.setValueAtTime(0, ctx.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+
+  oscillator.start(ctx.currentTime);
+  oscillator.stop(ctx.currentTime + 0.15);
+}
+
+// Match sound for twins (3+3, 6+6, etc.)
+// Simple soft pop/ding - pitch increases slightly with tile value
+export function playMatchTwins(tileValue: number): void {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') return;
+
+  // Calculate level based on tile value (3, 6, 12, 24, 48, 96, etc.)
+  const level = Math.log2(tileValue / 3) + 1; // 3->1, 6->2, 12->3, 24->4, etc.
+
+  // Simple single tone - pitch rises gently with tile value
+  const freq = 400 + Math.min(level * 40, 200); // 440-600Hz range
 
   const oscillator = ctx.createOscillator();
   const gainNode = ctx.createGain();
@@ -60,74 +101,17 @@ export function playMatch12(): void {
   oscillator.connect(gainNode);
   gainNode.connect(ctx.destination);
 
-  // Pleasant ascending tone
+  // Pure sine wave for clean sound
   oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(330, ctx.currentTime); // E4
-  oscillator.frequency.setValueAtTime(392, ctx.currentTime + 0.1); // G4
+  oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
 
-  gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+  // Quick attack, smooth decay - like a soft pop
+  gainNode.gain.setValueAtTime(0, ctx.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
 
   oscillator.start(ctx.currentTime);
-  oscillator.stop(ctx.currentTime + 0.3);
-}
-
-// Match sound for twins (3+3, 6+6, etc.)
-// Higher tile values get more exciting sounds
-export function playMatchTwins(tileValue: number): void {
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') return;
-
-  // Calculate excitement level based on tile value (3, 6, 12, 24, 48, 96, etc.)
-  const level = Math.log2(tileValue / 3) + 1; // 3->1, 6->2, 12->3, 24->4, etc.
-  const numNotes = Math.min(Math.floor(level) + 1, 5);
-
-  // Base frequency increases with tile value
-  const baseFreq = 330 + (level * 50);
-
-  for (let i = 0; i < numNotes; i++) {
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-
-    oscillator.type = i === 0 ? 'sine' : 'triangle';
-
-    // Create ascending arpeggio
-    const noteFreq = baseFreq * Math.pow(1.25, i); // Major third intervals
-    const noteTime = ctx.currentTime + (i * 0.08);
-
-    oscillator.frequency.setValueAtTime(noteFreq, noteTime);
-
-    // Volume increases with excitement
-    const volume = 0.15 + (level * 0.02);
-    gainNode.gain.setValueAtTime(0, noteTime);
-    gainNode.gain.linearRampToValueAtTime(volume, noteTime + 0.02);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, noteTime + 0.25);
-
-    oscillator.start(noteTime);
-    oscillator.stop(noteTime + 0.3);
-  }
-
-  // Add a shimmer effect for high value matches
-  if (level >= 3) {
-    const shimmer = ctx.createOscillator();
-    const shimmerGain = ctx.createGain();
-
-    shimmer.connect(shimmerGain);
-    shimmerGain.connect(ctx.destination);
-
-    shimmer.type = 'sine';
-    shimmer.frequency.setValueAtTime(baseFreq * 2, ctx.currentTime);
-    shimmer.frequency.setValueAtTime(baseFreq * 3, ctx.currentTime + 0.2);
-
-    shimmerGain.gain.setValueAtTime(0.05, ctx.currentTime);
-    shimmerGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-
-    shimmer.start(ctx.currentTime);
-    shimmer.stop(ctx.currentTime + 0.4);
-  }
+  oscillator.stop(ctx.currentTime + 0.18);
 }
 
 // Game over sound

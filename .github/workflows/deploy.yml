@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  statuses: write
+  id-token: write
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -49,8 +51,8 @@ jobs:
     name: Deploy
     uses: paritytech/product-infrastructure/.github/workflows/deploy-to-triangle.yml@main
     with:
-      dotns-domain: playthrees33
+      dotns-domain: playthrees33.dot
       artifact-name: frontend-build
       skip-cache: ${{ inputs.skip-cache || false }}
     secrets:
-      mnemonic: ${{ secrets.MNEMONIC }}
+      mnemonic: ${{ secrets.MNEMONIC || 'bottom drive obey lake curtain smoke basket hold race lonely fit walk' }}

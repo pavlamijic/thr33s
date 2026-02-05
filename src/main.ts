@@ -64,6 +64,10 @@ function initializeGame(): void {
 
       case 'scoreUpdate':
         renderer.updateScore(event.data?.score || 0);
+        // Notify tutorial of high tile achievements
+        if (event.data?.highestTile) {
+          tutorialController.onHighTile(event.data.highestTile);
+        }
         break;
 
       case 'gameOver':

@@ -167,9 +167,10 @@ function handleGameOver(score: number, highestTile: number): void {
   showGameOverModal(
     score,
     highestTile,
-    walletService.isConnected(),
+    () => walletService.isConnected(),
     () => handleSubmitScore(score, highestTile),
-    () => handleConnectWallet(),
+    () => handleConnectWalletForSubmission(),
+    () => handleSetAlias(),
     () => {
       gameState.newGame();
     }
@@ -196,30 +197,39 @@ async function handleSubmitScore(score: number, highestTile: number): Promise<vo
   }
 }
 
-// Handle wallet connection
+// Handle wallet connection (for header button)
 function handleConnectWallet(): void {
+  handleConnectWalletForSubmission();
+}
+
+// Handle wallet connection for score submission (returns success status)
+async function handleConnectWalletForSubmission(): Promise<boolean> {
   const providers = walletService.getInstalledProviders();
 
   if (providers.length === 0) {
     showErrorModal(
       'No wallet extensions detected. Please install Talisman, SubWallet, or Polkadot.js extension.'
     );
-    return;
+    return false;
   }
 
-  showWalletProviderModal(providers, async (providerId) => {
-    const closeLoading = showLoadingModal('Connecting wallet...');
+  return new Promise((resolve) => {
+    showWalletProviderModal(providers, async (providerId) => {
+      const closeLoading = showLoadingModal('Connecting wallet...');
 
-    try {
-      await walletService.connect(providerId);
-      closeLoading();
-    } catch (error) {
-      closeLoading();
-      console.error('Failed to connect wallet:', error);
-      showErrorModal(
-        `Failed to connect wallet: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+      try {
+        await walletService.connect(providerId);
+        closeLoading();
+        resolve(true);
+      } catch (error) {
+        closeLoading();
+        console.error('Failed to connect wallet:', error);
+        showErrorModal(
+          `Failed to connect wallet: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+        resolve(false);
+      }
+    });
   });
 }
 
@@ -258,7 +268,7 @@ async function handleShowLeaderboard(): Promise<void> {
 
   try {
     const [scores, personalBest] = await Promise.all([
-      leaderboardService.getTopScores(20),
+      leaderboardService.getTopScores(10),
       walletService.isConnected() ? leaderboardService.getPersonalBest() : Promise.resolve(null),
     ]);
 

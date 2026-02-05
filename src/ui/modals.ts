@@ -27,13 +27,14 @@ function createModalOverlay(): HTMLElement {
   return overlay;
 }
 
-// Show game over modal
+// Show game over modal with dynamic wallet state
 export function showGameOverModal(
   score: number,
   highestTile: number,
-  isWalletConnected: boolean,
-  onSubmitScore: () => void,
-  onConnectWallet: () => void,
+  isWalletConnected: () => boolean,
+  onSubmitScore: () => Promise<void>,
+  onConnectWallet: () => Promise<boolean>,
+  onSetAlias: () => void,
   onPlayAgain: () => void
 ): ModalCloseCallback {
   const modalsContainer = document.getElementById('modals')!;
@@ -42,44 +43,62 @@ export function showGameOverModal(
   const modal = document.createElement('div');
   modal.className = 'modal';
 
+  function renderButtons() {
+    const buttonsContainer = modal.querySelector('.modal-buttons')!;
+    const connected = isWalletConnected();
+
+    buttonsContainer.innerHTML = connected
+      ? `
+        <button class="btn btn-primary" id="submit-score-btn">Submit to Leaderboard</button>
+        <button class="btn btn-secondary" id="set-alias-btn">Set Alias</button>
+        <button class="btn btn-secondary" id="play-again-btn">Play Again</button>
+      `
+      : `
+        <button class="btn btn-primary" id="connect-wallet-btn">Connect Wallet to Submit</button>
+        <button class="btn btn-secondary" id="play-again-btn">Play Again</button>
+      `;
+
+    attachButtonHandlers();
+  }
+
+  function attachButtonHandlers() {
+    const submitBtn = modal.querySelector('#submit-score-btn');
+    const connectBtn = modal.querySelector('#connect-wallet-btn');
+    const aliasBtn = modal.querySelector('#set-alias-btn');
+    const playAgainBtn = modal.querySelector('#play-again-btn');
+
+    submitBtn?.addEventListener('click', async () => {
+      await onSubmitScore();
+    });
+
+    connectBtn?.addEventListener('click', async () => {
+      const success = await onConnectWallet();
+      if (success) {
+        renderButtons();
+      }
+    });
+
+    aliasBtn?.addEventListener('click', () => {
+      onSetAlias();
+    });
+
+    playAgainBtn?.addEventListener('click', () => {
+      close();
+      onPlayAgain();
+    });
+  }
+
   modal.innerHTML = `
     <h2>Game Over</h2>
     <div class="modal-score">${score}</div>
     <div class="modal-highest">Highest tile: ${highestTile}</div>
-    <div class="modal-buttons">
-      ${
-        isWalletConnected
-          ? '<button class="btn btn-primary" id="submit-score-btn">Submit to Leaderboard</button>'
-          : '<button class="btn btn-secondary" id="connect-wallet-btn">Connect Wallet to Submit</button>'
-      }
-      <button class="btn btn-secondary" id="play-again-btn">Play Again</button>
-    </div>
+    <div class="modal-buttons"></div>
   `;
 
   overlay.appendChild(modal);
   modalsContainer.appendChild(overlay);
 
-  // Button handlers
-  const submitBtn = modal.querySelector('#submit-score-btn');
-  const connectBtn = modal.querySelector('#connect-wallet-btn');
-  const playAgainBtn = modal.querySelector('#play-again-btn');
-
-  if (submitBtn) {
-    submitBtn.addEventListener('click', () => {
-      onSubmitScore();
-    });
-  }
-
-  if (connectBtn) {
-    connectBtn.addEventListener('click', () => {
-      onConnectWallet();
-    });
-  }
-
-  playAgainBtn?.addEventListener('click', () => {
-    close();
-    onPlayAgain();
-  });
+  renderButtons();
 
   // Close on overlay click (outside modal)
   overlay.addEventListener('click', (e) => {

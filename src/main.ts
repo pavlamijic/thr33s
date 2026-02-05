@@ -89,15 +89,11 @@ function initializeGame(): void {
   // Set up wallet event listener
   walletService.subscribe(handleWalletEvent);
 
-  // Start tutorial (which will start the game when done)
-  tutorialController.start(() => {
-    gameState.newGame();
-  });
+  // Start the game first so the board is populated
+  gameState.newGame();
 
-  // If tutorial was already completed, start game immediately
-  if (!tutorialController.isRunning()) {
-    gameState.newGame();
-  }
+  // Then start tutorial overlay on top of the running game
+  tutorialController.start();
 }
 
 // Handle move effects (sounds and tutorial callbacks)

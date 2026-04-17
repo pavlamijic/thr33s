@@ -226,6 +226,31 @@ export class PolkadotClient {
     }
   }
 
+  // Reverse-map an EVM address to its original Substrate (SS58) account, if
+  // the account has been registered via pallet_revive.map_account. Returns
+  // null for eth-derived (MetaMask) addresses and unmapped accounts.
+  async getSubstrateAddressForEvm(evmAddress: Address): Promise<string | null> {
+    if (!this.api) {
+      await this.connect();
+    }
+    try {
+      const key = Binary.fromHex(evmAddress);
+      const mappedAccount = await this.api.query.Revive.OriginalAccount.getValue(key);
+      console.log('[revive] OriginalAccount', evmAddress, '→', mappedAccount, 'typeof=', typeof mappedAccount);
+      if (mappedAccount === null || mappedAccount === undefined) return null;
+      // AccountId32 may decode as an SS58 string, a hex string, a Uint8Array,
+      // or a wrapper with a .toString(). Normalise.
+      if (typeof mappedAccount === 'string') return mappedAccount;
+      const asAny = mappedAccount as any;
+      if (typeof asAny.asHex === 'function') return asAny.asHex();
+      if (typeof asAny.toHex === 'function') return asAny.toHex();
+      return String(mappedAccount);
+    } catch (error) {
+      console.warn('[revive] OriginalAccount lookup failed:', error);
+      return null;
+    }
+  }
+
   // Ensure an account is mapped to an EVM address
   async ensureAccountMapped(
     substrateAddress: string,

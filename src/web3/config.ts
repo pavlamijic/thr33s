@@ -12,6 +12,12 @@ export const CONFIG = {
   // EVM HTTP RPC (for reference)
   evmRpcEndpoint: 'https://eth-rpc-testnet.polkadot.io/',
 
+  // PoP identity (People) chain on the Stable network — the "Polkadot App"
+  // testnet where attested usernames live. Stable ids: Relay, AssetHub (1000),
+  // People (1004), Bulletin (2487). The older `pop_stable` port-routed URL
+  // (:7912) tick3t used is stale; this is the current path-routed endpoint.
+  popStableRpcEndpoint: 'wss://pop3-testnet.parity-lab.parity.io/people',
+
   // Currency
   currencySymbol: 'PAS',
   currencyDecimals: 18,

@@ -9,10 +9,12 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
     "typescript": "~5.9.3",
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "@novasamatech/product-sdk": "^0.7.0-2",
     "@talismn/connect-wallets": "^1.2.0",
     "polkadot-api": "^1.9.5",
     "viem": "^2.0.0"

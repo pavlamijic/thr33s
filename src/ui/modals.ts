@@ -34,7 +34,6 @@ export function showGameOverModal(
   isWalletConnected: () => boolean,
   onSubmitScore: () => Promise<void>,
   onConnectWallet: () => Promise<boolean>,
-  onSetAlias: () => void,
   onPlayAgain: () => void
 ): ModalCloseCallback {
   const modalsContainer = document.getElementById('modals')!;
@@ -50,7 +49,6 @@ export function showGameOverModal(
     buttonsContainer.innerHTML = connected
       ? `
         <button class="btn btn-primary" id="submit-score-btn">Submit to Leaderboard</button>
-        <button class="btn btn-secondary" id="set-alias-btn">Set Alias</button>
         <button class="btn btn-secondary" id="play-again-btn">Play Again</button>
       `
       : `
@@ -64,7 +62,6 @@ export function showGameOverModal(
   function attachButtonHandlers() {
     const submitBtn = modal.querySelector('#submit-score-btn');
     const connectBtn = modal.querySelector('#connect-wallet-btn');
-    const aliasBtn = modal.querySelector('#set-alias-btn');
     const playAgainBtn = modal.querySelector('#play-again-btn');
 
     submitBtn?.addEventListener('click', async () => {
@@ -76,10 +73,6 @@ export function showGameOverModal(
       if (success) {
         renderButtons();
       }
-    });
-
-    aliasBtn?.addEventListener('click', () => {
-      onSetAlias();
     });
 
     playAgainBtn?.addEventListener('click', () => {
@@ -114,21 +107,30 @@ export function showGameOverModal(
   return close;
 }
 
-// Show leaderboard modal
+// Escapes a string for safe insertion into HTML text content.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Show leaderboard modal. If `resolveDisplayName` is provided, rows render
+// immediately with the truncated address and each cell is upgraded in place
+// as its display name resolves.
 export function showLeaderboardModal(
   entries: LeaderboardEntry[],
   currentAddress: string | null,
   personalBest: number | null,
-  getDisplayName?: (address: string) => string
+  resolveDisplayName?: (address: string) => Promise<string>
 ): ModalCloseCallback {
   const modalsContainer = document.getElementById('modals')!;
 
   const overlay = createModalOverlay();
   const modal = document.createElement('div');
   modal.className = 'modal';
-
-  // Use provided display name function or fallback to truncate
-  const displayName = getDisplayName || truncateAddress;
 
   const entriesHtml = entries.length === 0
     ? '<p>No scores yet. Be the first!</p>'
@@ -148,7 +150,7 @@ export function showLeaderboardModal(
               (entry) => `
               <tr class="${entry.address.toLowerCase() === currentAddress?.toLowerCase() ? 'highlight' : ''}">
                 <td>${entry.rank}</td>
-                <td class="leaderboard-player">${displayName(entry.address)}</td>
+                <td class="leaderboard-player" data-address="${escapeHtml(entry.address)}">${escapeHtml(truncateAddress(entry.address))}</td>
                 <td>${entry.score}</td>
                 <td>${entry.highestTile}</td>
               </tr>
@@ -175,18 +177,40 @@ export function showLeaderboardModal(
   overlay.appendChild(modal);
   modalsContainer.appendChild(overlay);
 
+  let cancelled = false;
+
+  function close() {
+    cancelled = true;
+    overlay.remove();
+  }
+
   // Close handlers
   const closeBtn = modal.querySelector('#close-leaderboard-btn');
   closeBtn?.addEventListener('click', close);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      close();
-    }
+    if (e.target === overlay) close();
   });
 
-  function close() {
-    overlay.remove();
+  // Progressive enhancement: swap each cell's text with the resolved display
+  // name (typically a PoP-attested username). Resolutions can fail silently —
+  // the truncated fallback is already rendered.
+  if (resolveDisplayName) {
+    const cells = modal.querySelectorAll<HTMLElement>('.leaderboard-player[data-address]');
+    cells.forEach((cell) => {
+      const address = cell.dataset.address;
+      if (!address) return;
+      resolveDisplayName(address)
+        .then((name) => {
+          if (cancelled) return;
+          if (name && name !== cell.textContent) {
+            cell.textContent = name;
+          }
+        })
+        .catch(() => {
+          // Truncated fallback is already in place; nothing to do.
+        });
+    });
   }
 
   return close;
@@ -344,91 +368,6 @@ export function showSuccessModal(
 
   const closeBtn = modal.querySelector('#success-close-btn');
   closeBtn?.addEventListener('click', close);
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      close();
-    }
-  });
-
-  function close() {
-    overlay.remove();
-  }
-
-  return close;
-}
-
-// Show set alias modal
-export function showSetAliasModal(
-  currentAddress: string,
-  currentAlias: string | null,
-  onSave: (alias: string) => void
-): ModalCloseCallback {
-  const modalsContainer = document.getElementById('modals')!;
-
-  const overlay = createModalOverlay();
-  const modal = document.createElement('div');
-  modal.className = 'modal';
-
-  modal.innerHTML = `
-    <h2>Set Your Alias</h2>
-    <p class="alias-hint">Choose a nickname to display on the leaderboard instead of your address.</p>
-    <div class="alias-input-container">
-      <input
-        type="text"
-        id="alias-input"
-        class="alias-input"
-        placeholder="Enter alias (max 20 chars)"
-        maxlength="20"
-        value="${currentAlias || ''}"
-      />
-      <div class="alias-preview">
-        <span class="alias-preview-label">Preview:</span>
-        <span id="alias-preview-text">${currentAlias || truncateAddress(currentAddress)}</span>
-      </div>
-    </div>
-    <div class="modal-buttons">
-      <button class="btn btn-primary" id="save-alias-btn">Save</button>
-      <button class="btn btn-secondary" id="cancel-alias-btn">Cancel</button>
-    </div>
-  `;
-
-  overlay.appendChild(modal);
-  modalsContainer.appendChild(overlay);
-
-  const input = modal.querySelector('#alias-input') as HTMLInputElement;
-  const previewText = modal.querySelector('#alias-preview-text')!;
-  const saveBtn = modal.querySelector('#save-alias-btn')!;
-  const cancelBtn = modal.querySelector('#cancel-alias-btn')!;
-
-  // Update preview as user types
-  input.addEventListener('input', () => {
-    const value = input.value.trim();
-    previewText.textContent = value || truncateAddress(currentAddress);
-  });
-
-  // Focus input
-  setTimeout(() => input.focus(), 100);
-
-  // Save handler
-  saveBtn.addEventListener('click', () => {
-    onSave(input.value.trim());
-    close();
-  });
-
-  // Cancel handler
-  cancelBtn.addEventListener('click', close);
-
-  // Enter key to save
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      onSave(input.value.trim());
-      close();
-    }
-    if (e.key === 'Escape') {
-      close();
-    }
-  });
 
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {

@@ -1,8 +1,17 @@
 import { getWallets, type Wallet, type WalletAccount } from '@talismn/connect-wallets';
-import { getPolkadotSignerFromPjs } from 'polkadot-api/pjs-signer';
+import {
+  getPolkadotSignerFromPjs,
+  type InjectedExtension,
+  type InjectedPolkadotAccount,
+} from 'polkadot-api/pjs-signer';
 import type { PolkadotSigner } from 'polkadot-api';
 import { createWalletClient, custom, type WalletClient } from 'viem';
 import { CONFIG } from './config';
+import {
+  connectToHost,
+  getHostAccountsWithRetry,
+  isInHost,
+} from './host-wallet';
 
 // Extend Window interface for ethereum
 declare global {
@@ -61,6 +70,11 @@ export class WalletService {
   private walletType: 'substrate' | 'evm' | null = null;
   private evmAddress: string | null = null;
   private evmWalletClient: WalletClient | null = null;
+  // Host-injected Spektr extension (Polkadot Desktop / trUI). Tracked
+  // separately from the Talisman `wallet`/`account` pair because its account
+  // shape already ships a ready-to-use `PolkadotSigner`.
+  private hostExtension: InjectedExtension | null = null;
+  private hostAccount: InjectedPolkadotAccount | null = null;
 
   // Get available wallet providers
   getAvailableProviders(): WalletProvider[] {
@@ -106,6 +120,36 @@ export class WalletService {
     for (const listener of this.listeners) {
       listener(event);
     }
+  }
+
+  // Attempt to auto-connect via the host (Polkadot Desktop / trUI). Returns
+  // true on success. Safe to call unconditionally on app start — resolves
+  // false when not running inside a host.
+  async connectFromHost(): Promise<boolean> {
+    if (!isInHost()) return false;
+
+    const extension = await connectToHost();
+    if (!extension) return false;
+
+    const accounts = await getHostAccountsWithRetry(extension);
+    if (accounts.length === 0) {
+      extension.disconnect();
+      return false;
+    }
+
+    this.hostExtension = extension;
+    this.hostAccount = accounts[0];
+    this.wallet = null;
+    this.account = null;
+    this.evmAddress = null;
+    this.evmWalletClient = null;
+    this.walletType = 'substrate';
+
+    this.emit({
+      type: 'connect',
+      address: this.hostAccount.address,
+    });
+    return true;
   }
 
   // Connect to a wallet provider
@@ -227,8 +271,17 @@ export class WalletService {
 
   // Disconnect from wallet
   disconnect(): void {
+    if (this.hostExtension) {
+      try {
+        this.hostExtension.disconnect();
+      } catch (error) {
+        console.warn('[host] disconnect failed:', error);
+      }
+    }
     this.wallet = null;
     this.account = null;
+    this.hostExtension = null;
+    this.hostAccount = null;
     this.walletType = null;
     this.evmAddress = null;
     this.evmWalletClient = null;
@@ -240,6 +293,7 @@ export class WalletService {
     if (this.walletType === 'evm') {
       return this.evmAddress !== null;
     }
+    if (this.hostAccount !== null) return true;
     return this.wallet !== null && this.account !== null;
   }
 
@@ -248,6 +302,7 @@ export class WalletService {
     if (this.walletType === 'evm') {
       return this.evmAddress;
     }
+    if (this.hostAccount) return this.hostAccount.address;
     return this.account?.address || null;
   }
 
@@ -256,6 +311,7 @@ export class WalletService {
     if (this.walletType === 'evm') {
       return 'MetaMask';
     }
+    if (this.hostAccount) return this.hostAccount.name || null;
     return this.account?.name || null;
   }
 
@@ -278,6 +334,10 @@ export class WalletService {
 
   // Get signer for transactions
   getSigner(): PolkadotSigner {
+    if (this.hostAccount) {
+      return this.hostAccount.polkadotSigner;
+    }
+
     if (!this.account || !this.wallet) {
       throw new Error('Wallet not connected');
     }

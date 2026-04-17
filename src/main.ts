@@ -13,10 +13,9 @@ import {
   showErrorModal,
   showSuccessModal,
   showInstructionsModal,
-  showSetAliasModal,
   type LeaderboardEntry,
 } from './ui/modals';
-import { getAlias, setAlias, getDisplayName } from './web3/aliases';
+import { getDisplayName, getPopName, truncateAddress } from './web3/pop-stable';
 import { walletService } from './web3/wallet';
 import { leaderboardService } from './web3/leaderboard';
 import {
@@ -98,6 +97,14 @@ function initializeGame(): void {
 
   // Then start tutorial overlay on top of the running game
   tutorialController.start();
+
+  // If we're running inside a Polkadot Desktop / trUI host, try to
+  // auto-connect to the host-injected account so the user never sees
+  // the wallet picker. Failure is silent — the user can still click
+  // Connect Wallet to pick a browser extension.
+  void walletService.connectFromHost().catch((error) => {
+    console.warn('[host] auto-connect failed:', error);
+  });
 }
 
 // Handle move effects (sounds and tutorial callbacks)
@@ -170,7 +177,6 @@ function handleGameOver(score: number, highestTile: number): void {
     () => walletService.isConnected(),
     () => handleSubmitScore(score, highestTile),
     () => handleConnectWalletForSubmission(),
-    () => handleSetAlias(),
     () => {
       gameState.newGame();
     }
@@ -243,19 +249,41 @@ function handleWalletEvent(_event: { type: string; address?: string }): void {
   updateWalletButton();
 }
 
-// Update wallet button state
+// Tracks the most recent wallet address the button was rendered for, so that
+// an in-flight PoP-name resolution that finishes after a disconnect or
+// account switch can't clobber the updated UI.
+let walletButtonAddress: string | null = null;
+
 function updateWalletButton(): void {
   const walletBtn = document.getElementById('wallet-btn')!;
 
   if (walletService.isConnected()) {
     const address = walletService.getAddress();
-    const displayText = address ? getDisplayName(address) : walletService.getDisplayAddress();
+    walletButtonAddress = address;
+    const fallback = address ? truncateAddress(address) : walletService.getDisplayAddress();
     walletBtn.innerHTML = `
-      <span class="wallet-address">${displayText}</span>
+      <span class="wallet-address">${fallback}</span>
     `;
     walletBtn.classList.add('wallet-connected');
     walletBtn.onclick = handleDisconnectWallet;
+
+    // Progressive enhancement: swap in the PoP-attested username if one
+    // exists. The truncated address is already on screen as a fallback.
+    if (address) {
+      const addressAtRequest = address;
+      getPopName(address)
+        .then((name) => {
+          if (!name) return;
+          if (walletButtonAddress !== addressAtRequest) return;
+          const label = walletBtn.querySelector('.wallet-address');
+          if (label) label.textContent = name;
+        })
+        .catch(() => {
+          // Keep the truncated fallback.
+        });
+    }
   } else {
+    walletButtonAddress = null;
     walletBtn.textContent = 'Connect Wallet';
     walletBtn.classList.remove('wallet-connected');
     walletBtn.onclick = handleConnectWallet;
@@ -290,22 +318,6 @@ async function handleShowLeaderboard(): Promise<void> {
     // Show empty leaderboard on error
     showLeaderboardModal([], walletService.getAddress(), null, getDisplayName);
   }
-}
-
-// Handle setting alias
-function handleSetAlias(): void {
-  const address = walletService.getAddress();
-  if (!address) {
-    showErrorModal('Please connect your wallet first to set an alias.');
-    return;
-  }
-
-  const currentAlias = getAlias(address);
-  showSetAliasModal(address, currentAlias, (newAlias) => {
-    setAlias(address, newAlias);
-    // Update wallet button to show new alias
-    updateWalletButton();
-  });
 }
 
 // Set up header buttons
@@ -351,17 +363,6 @@ function setupSoundToggle(): void {
     }
   };
 
-  // Alias button (user icon)
-  const aliasBtn = document.createElement('button');
-  aliasBtn.id = 'alias-btn';
-  aliasBtn.className = 'btn-icon';
-  aliasBtn.setAttribute('aria-label', 'Set alias');
-  aliasBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-    <circle cx="12" cy="7" r="4"/>
-  </svg>`;
-  aliasBtn.onclick = handleSetAlias;
-
   // Sound toggle button
   const soundBtn = document.createElement('button');
   soundBtn.id = 'sound-toggle';
@@ -382,7 +383,6 @@ function setupSoundToggle(): void {
 
   // Insert buttons at the beginning of header-right (before leaderboard button)
   headerRight.insertBefore(soundBtn, headerRight.firstChild);
-  headerRight.insertBefore(aliasBtn, headerRight.firstChild);
   headerRight.insertBefore(restartBtn, headerRight.firstChild);
   headerRight.insertBefore(helpBtn, headerRight.firstChild);
 }

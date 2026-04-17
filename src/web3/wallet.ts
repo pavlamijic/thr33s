@@ -1,16 +1,13 @@
 import { getWallets, type Wallet, type WalletAccount } from '@talismn/connect-wallets';
-import {
-  getPolkadotSignerFromPjs,
-  type InjectedExtension,
-  type InjectedPolkadotAccount,
-} from 'polkadot-api/pjs-signer';
+import { getPolkadotSignerFromPjs } from 'polkadot-api/pjs-signer';
 import type { PolkadotSigner } from 'polkadot-api';
 import { createWalletClient, custom, type WalletClient } from 'viem';
 import { CONFIG } from './config';
 import {
   connectToHost,
-  getHostAccountsWithRetry,
   isInHost,
+  subscribeHostConnection,
+  type HostAccount,
 } from './host-wallet';
 
 // Extend Window interface for ethereum
@@ -70,11 +67,11 @@ export class WalletService {
   private walletType: 'substrate' | 'evm' | null = null;
   private evmAddress: string | null = null;
   private evmWalletClient: WalletClient | null = null;
-  // Host-injected Spektr extension (Polkadot Desktop / trUI). Tracked
-  // separately from the Talisman `wallet`/`account` pair because its account
-  // shape already ships a ready-to-use `PolkadotSigner`.
-  private hostExtension: InjectedExtension | null = null;
-  private hostAccount: InjectedPolkadotAccount | null = null;
+  // Host-provided account (Polkadot Desktop / trUI / dot.li). Resolved via
+  // `@novasamatech/product-sdk` instead of the Talisman/pjs bridge because
+  // dot.li's cross-origin iframe only speaks the product-sdk protocol.
+  private hostAccount: HostAccount | null = null;
+  private hostSubscription: (() => void) | null = null;
 
   // Get available wallet providers
   getAvailableProviders(): WalletProvider[] {
@@ -122,23 +119,32 @@ export class WalletService {
     }
   }
 
-  // Attempt to auto-connect via the host (Polkadot Desktop / trUI). Returns
-  // true on success. Safe to call unconditionally on app start — resolves
-  // false when not running inside a host.
+  // Attempt to auto-connect via the host (Polkadot Desktop / trUI / dot.li).
+  // Safe to call unconditionally on app start — resolves false when not
+  // running inside a host. When the host has no active session yet (user
+  // hasn't signed in), this returns false but leaves a subscription in
+  // place so a later sign-in will emit a `connect` event automatically.
   async connectFromHost(): Promise<boolean> {
     if (!isInHost()) return false;
 
-    const extension = await connectToHost();
-    if (!extension) return false;
+    // Ensure we only have one subscription in flight across repeat calls.
+    this.hostSubscription?.();
+    this.hostSubscription = subscribeHostConnection(
+      (account) => this.applyHostAccount(account),
+      () => {
+        if (this.hostAccount) this.disconnect();
+      },
+    );
 
-    const accounts = await getHostAccountsWithRetry(extension);
-    if (accounts.length === 0) {
-      extension.disconnect();
-      return false;
-    }
+    const account = await connectToHost();
+    if (!account) return false;
 
-    this.hostExtension = extension;
-    this.hostAccount = accounts[0];
+    this.applyHostAccount(account);
+    return true;
+  }
+
+  private applyHostAccount(account: HostAccount): void {
+    this.hostAccount = account;
     this.wallet = null;
     this.account = null;
     this.evmAddress = null;
@@ -147,9 +153,8 @@ export class WalletService {
 
     this.emit({
       type: 'connect',
-      address: this.hostAccount.address,
+      address: account.address,
     });
-    return true;
   }
 
   // Connect to a wallet provider
@@ -271,16 +276,10 @@ export class WalletService {
 
   // Disconnect from wallet
   disconnect(): void {
-    if (this.hostExtension) {
-      try {
-        this.hostExtension.disconnect();
-      } catch (error) {
-        console.warn('[host] disconnect failed:', error);
-      }
-    }
+    this.hostSubscription?.();
+    this.hostSubscription = null;
     this.wallet = null;
     this.account = null;
-    this.hostExtension = null;
     this.hostAccount = null;
     this.walletType = null;
     this.evmAddress = null;
@@ -335,7 +334,7 @@ export class WalletService {
   // Get signer for transactions
   getSigner(): PolkadotSigner {
     if (this.hostAccount) {
-      return this.hostAccount.polkadotSigner;
+      return this.hostAccount.signer;
     }
 
     if (!this.account || !this.wallet) {

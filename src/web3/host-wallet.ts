@@ -1,24 +1,28 @@
-// Polkadot Desktop / trUI host integration.
+// Polkadot Desktop / trUI / dot.li host integration.
 //
-// When thr33s runs as a `.dot` app inside Polkadot Desktop, the host injects
-// a Spektr-compatible extension that exposes the user's already-unlocked
-// Polkadot account(s) via the standard `window.injectedWeb3` bridge. We
-// detect that environment and connect through it so the user never has to
-// click "Connect Wallet". On the public web (playthrees33.dot.li) the host
-// isn't present, `connectToHost()` returns null, and the caller falls back
-// to the existing wallet-extension picker.
+// When thr33s runs inside a Polkadot "Triangle" host — polkadot-desktop as
+// `playthrees33.dot`, or dot.li as `playthrees33.dot.li` — the host exposes
+// the user's logged-in account via `@novasamatech/product-sdk`. We read it
+// through the SDK's AccountsProvider (NOT through the injectedWeb3 / pjs
+// bridge — that path only works inside the Electron webview, not inside
+// dot.li's cross-origin iframe).
 //
-// Pattern mirrors linktr33's `app_ext/src/wallet/host.ts`.
+// Detection mirrors ignite's `isInTriangleHost()` and the SDK's own internal
+// transport selection: `window.__HOST_WEBVIEW_MARK__` (desktop/mobile), or
+// any iframe (dot.li). `injectSpektrExtension()` returning true is the
+// definitive confirmation — it's also what sets up the SDK's sandbox
+// transport for everything else to work.
+//
+// Pattern copied from:
+//   refs/ignite/src/contexts/WalletContext.tsx
+//   refs/ignite/src/lib/triangle/hostDetection.ts
 
 import {
+  createAccountsProvider,
   injectSpektrExtension,
-  SpektrExtensionName,
+  type ProductAccount,
 } from '@novasamatech/product-sdk';
-import {
-  connectInjectedExtension,
-  type InjectedExtension,
-  type InjectedPolkadotAccount,
-} from 'polkadot-api/pjs-signer';
+import { AccountId, type PolkadotSigner } from 'polkadot-api';
 
 declare global {
   interface Window {
@@ -28,10 +32,22 @@ declare global {
 
 export type HostEnvironment = 'desktop-webview' | 'web-iframe' | 'standalone';
 
+export interface HostAccount {
+  address: string;
+  name: string;
+  publicKey: Uint8Array;
+  signer: PolkadotSigner;
+}
+
 export function detectHostEnvironment(): HostEnvironment {
   if (typeof window === 'undefined') return 'standalone';
   if (window.__HOST_WEBVIEW_MARK__) return 'desktop-webview';
-  if (window.parent !== window) return 'web-iframe';
+  try {
+    if (window !== window.top) return 'web-iframe';
+  } catch {
+    // Cross-origin iframe — the comparison throws; still a host.
+    return 'web-iframe';
+  }
   return 'standalone';
 }
 
@@ -39,29 +55,83 @@ export function isInHost(): boolean {
   return detectHostEnvironment() !== 'standalone';
 }
 
-export async function connectToHost(): Promise<InjectedExtension | null> {
+// Shared by all callers so the SDK only spins up one sandbox transport.
+const accountsProvider = createAccountsProvider();
+const accountIdCodec = AccountId();
+
+function rawToHostAccount(raw: { publicKey: Uint8Array; name: string | undefined }): HostAccount {
+  const productAccount: ProductAccount = {
+    publicKey: raw.publicKey,
+    dotNsIdentifier: '',
+    derivationIndex: 0,
+  };
+  return {
+    address: accountIdCodec.dec(raw.publicKey),
+    name: raw.name || 'Account',
+    publicKey: raw.publicKey,
+    signer: accountsProvider.getLegacyAccountSigner(productAccount),
+  };
+}
+
+// One-shot connect. Returns the first logged-in host account, or null when:
+//   - not in a host,
+//   - `injectSpektrExtension()` reports false (the SDK couldn't handshake),
+//   - the host has no active session (user hasn't signed in yet).
+//
+// For the "user signs in after the page loaded" case the caller should
+// `subscribeHostConnection` and re-call this when the status flips to
+// `connected`.
+export async function connectToHost(): Promise<HostAccount | null> {
   try {
-    const success = await injectSpektrExtension();
-    if (!success) return null;
-    return await connectInjectedExtension(SpektrExtensionName);
+    const injected = await injectSpektrExtension();
+    if (!injected) return null;
+
+    const result = await accountsProvider.getLegacyAccounts();
+    if (!result.isOk()) {
+      console.warn('[host] getLegacyAccounts failed:', result.error);
+      return null;
+    }
+
+    const raw = result.value;
+    if (raw.length === 0) return null;
+
+    return rawToHostAccount(raw[0]);
   } catch (error) {
-    console.warn('[host] Spektr connect failed:', error);
+    console.warn('[host] connectToHost threw:', error);
     return null;
   }
 }
 
-// The host may restore its session lazily (e.g. after requestIdleCallback),
-// so an initial `getAccounts()` can return an empty list. Poll briefly.
-export async function getHostAccountsWithRetry(
-  extension: InjectedExtension,
-  timeoutMs = 8_000,
-  intervalMs = 250,
-): Promise<InjectedPolkadotAccount[]> {
-  const deadline = Date.now() + timeoutMs;
-  let accounts = extension.getAccounts();
-  while (accounts.length === 0 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    accounts = extension.getAccounts();
-  }
-  return accounts;
+// Subscribes to the host's account-connection status so we can pick up a
+// sign-in that happens after our initial attempt. `onConnect` fires with the
+// first account whenever the host transitions to connected and has accounts;
+// `onDisconnect` fires when the host logs out.
+export function subscribeHostConnection(
+  onConnect: (account: HostAccount) => void,
+  onDisconnect: () => void,
+): () => void {
+  const subscription = accountsProvider.subscribeAccountConnectionStatus(async (status) => {
+    if (status === 'disconnected') {
+      onDisconnect();
+      return;
+    }
+    if (status === 'connected') {
+      try {
+        const result = await accountsProvider.getLegacyAccounts();
+        if (result.isOk() && result.value.length > 0) {
+          onConnect(rawToHostAccount(result.value[0]));
+        }
+      } catch (error) {
+        console.warn('[host] re-fetch on reconnect failed:', error);
+      }
+    }
+  });
+
+  return () => {
+    try {
+      subscription.unsubscribe?.();
+    } catch {
+      // best-effort cleanup
+    }
+  };
 }

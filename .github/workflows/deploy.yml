@@ -640,7 +640,7 @@ jobs:
           import { UnixFS } from "ipfs-unixfs";
           import { DotNS } from "./dotns.js";
 
-          const BULLETIN_RPC = process.env.BULLETIN_RPC || "wss://bulletin.dotspark.app";
+          const BULLETIN_RPC = process.env.BULLETIN_RPC || "wss://paseo-bulletin-rpc.polkadot.io";
           const CHUNK_SIZE = 1 * 1024 * 1024;
           const MAX_FILE_SIZE = 8 * 1024 * 1024;
           const CID_CONFIG = { version: 1, codec: 0x55, hashCode: 0x12, hashLength: 32 };
@@ -965,4 +965,4 @@ jobs:
           echo "### Standalone" >> $GITHUB_STEP_SUMMARY
           echo "- **Main:** [https://${{ steps.final.outputs.domain }}.paseo.li](https://${{ steps.final.outputs.domain }}.paseo.li)" >> $GITHUB_STEP_SUMMARY
           echo "- **Alternative:** [https://${{ steps.final.outputs.domain }}.bigtava.online](https://${{ steps.final.outputs.domain }}.bigtava.online)" >> $GITHUB_STEP_SUMMARY
-          echo "- **IPFS Gateway:** [https://ipfs.dotspark.app/ipfs/${{ steps.final.outputs.cid }}](https://ipfs.dotspark.app/ipfs/${{ steps.final.outputs.cid }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **IPFS Gateway:** [https://paseo-ipfs.polkadot.io/ipfs/${{ steps.final.outputs.cid }}](https://paseo-ipfs.polkadot.io/ipfs/${{ steps.final.outputs.cid }})" >> $GITHUB_STEP_SUMMARY

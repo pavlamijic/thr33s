@@ -7,6 +7,10 @@ export default defineConfig({
     sourcemap: false,
     target: 'es2020',
     minify: 'esbuild',
+    // Inline `data:` URIs fail CSP inside the dot.li sandbox. Match
+    // ignite's Triangle preset and force every asset to be emitted as a
+    // separate file.
+    assetsInlineLimit: 0,
   },
   esbuild: {
     // Avoid eval usage in generated code

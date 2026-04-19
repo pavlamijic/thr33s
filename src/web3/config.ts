@@ -12,6 +12,12 @@ export const CONFIG = {
   // EVM HTTP RPC (for reference)
   evmRpcEndpoint: 'https://eth-rpc-testnet.polkadot.io/',
 
+  // Paseo Asset Hub genesis hash — required by `createPapiProvider` so
+  // the dot.li host can route our RPC through its sandbox-safe bridge
+  // instead of opening a direct WebSocket (which the sandbox blocks).
+  // Source: p2p-market's assethub-provider.ts.
+  paseoAssetHubGenesisHash: '0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2' as `0x${string}`,
+
   // Paseo Next People chain (Id 5140) — the Polkadot App TestFlight testnet
   // where attested usernames live. The "Stable" network
   // (pop3-testnet.parity-lab.parity.io) is being decommissioned; Paseo Next

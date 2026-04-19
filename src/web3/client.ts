@@ -1,8 +1,10 @@
 import { createClient, type PolkadotSigner, Binary } from 'polkadot-api';
 import { withPolkadotSdkCompat } from 'polkadot-api/polkadot-sdk-compat';
 import { getWsProvider } from 'polkadot-api/ws-provider/web';
+import { createPapiProvider } from '@novasamatech/product-sdk';
 import { type Address, type Hex, isAddress, bytesToHex, isHex, toHex } from 'viem';
 import { CONFIG } from './config';
+import { isInHost } from './host-wallet';
 
 // Transaction status callback type
 export type TransactionStatus =
@@ -135,11 +137,21 @@ export class PolkadotClient {
     proof_size: 18446744073709551615n,
   };
 
-  // Connect to the chain
+  // Connect to the chain. Inside a Polkadot Triangle host (dot.li,
+  // polkadot-desktop), direct WebSockets are blocked by the sandbox —
+  // route RPC through the host's sandbox-safe provider instead. Pattern
+  // copied from p2p-market's `lib/host/assethub-provider.ts`.
   async connect(): Promise<void> {
     if (this.client) return;
 
-    const provider = getWsProvider(CONFIG.rpcEndpoint);
+    // `createPapiProvider` (from product-sdk) and `getWsProvider` (from
+    // polkadot-api) return structurally-identical JsonRpcProvider objects
+    // typed against different nested copies of the provider interface.
+    // `any` bridges them without suppressing real call-site errors.
+    const provider = isInHost()
+      ? (createPapiProvider(CONFIG.paseoAssetHubGenesisHash) as any)
+      : getWsProvider(CONFIG.rpcEndpoint);
+
     this.client = createClient(withPolkadotSdkCompat(provider));
 
     // Get the untyped API for ReviveApi access

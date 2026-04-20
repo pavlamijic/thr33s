@@ -336,6 +336,12 @@ export class WalletService {
     return this.account?.name || null;
   }
 
+  // PoP-attested alias if the host surfaced one (e.g. "daemia.99"). Null
+  // when not connected via host, or when the host returned no alias.
+  getHostAlias(): string | null {
+    return this.hostAccount?.alias ?? null;
+  }
+
   // Get truncated address for display
   getDisplayAddress(): string {
     const address = this.getAddress();

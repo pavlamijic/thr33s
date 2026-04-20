@@ -289,16 +289,20 @@ function updateWalletButton(): void {
   if (walletService.isConnected()) {
     const address = walletService.getAddress();
     walletButtonAddress = address;
-    const fallback = address ? truncateAddress(address) : walletService.getDisplayAddress();
+    // Prefer the host-surfaced PoP alias (e.g. "daemia.99") when we have
+    // one — it's already attested and doesn't need a chain round-trip.
+    const hostAlias = walletService.getHostAlias();
+    const fallback =
+      hostAlias ?? (address ? truncateAddress(address) : walletService.getDisplayAddress());
     walletBtn.innerHTML = `
       <span class="wallet-address">${fallback}</span>
     `;
     walletBtn.classList.add('wallet-connected');
     walletBtn.onclick = handleDisconnectWallet;
 
-    // Progressive enhancement: swap in the PoP-attested username if one
-    // exists. The truncated address is already on screen as a fallback.
-    if (address) {
+    // Progressive enhancement: if we don't already have a host alias,
+    // try the pop_stable lookup. The truncated address is the fallback.
+    if (!hostAlias && address) {
       const addressAtRequest = address;
       getPopName(address)
         .then((name) => {

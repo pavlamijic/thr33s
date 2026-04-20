@@ -38,6 +38,11 @@ export interface HostAccount {
   name: string;
   publicKey: Uint8Array;
   signer: PolkadotSigner;
+  // Host-surfaced PoP-attested alias ("daemia.99" etc.) if the host's
+  // `getProductAccountAlias` call resolved. Null when the host didn't
+  // provide one — caller falls back to pop_stable lookup or truncated
+  // address.
+  alias: string | null;
 }
 
 export function detectHostEnvironment(): HostEnvironment {
@@ -78,6 +83,7 @@ function toProductHostAccount(
   raw: { publicKey: Uint8Array; name: string | undefined },
   dotNsIdentifier: string,
   derivationIndex: number,
+  alias: string | null,
 ): HostAccount {
   const productAccount: ProductAccount = {
     publicKey: raw.publicKey,
@@ -89,6 +95,7 @@ function toProductHostAccount(
     name: raw.name || 'Account',
     publicKey: raw.publicKey,
     signer: accountsProvider.getProductAccountSigner(productAccount),
+    alias,
   };
 }
 
@@ -103,7 +110,38 @@ function toLegacyHostAccount(raw: { publicKey: Uint8Array; name: string | undefi
     name: raw.name || 'Account',
     publicKey: raw.publicKey,
     signer: accountsProvider.getNonProductAccountSigner(productAccount),
+    alias: null,
   };
+}
+
+// Fetch the PoP-attested alias for the product account. The host returns
+// `{ context, alias }` where `alias` is raw UTF-8 bytes (the name the user
+// enrolled under, e.g. "daemia.99"). Null on timeout / failure / empty.
+async function fetchProductAlias(
+  dotNsIdentifier: string,
+  derivationIndex: number,
+): Promise<string | null> {
+  try {
+    const result = await raceWithTimeout(
+      accountsProvider.getProductAccountAlias(dotNsIdentifier, derivationIndex),
+      GET_ACCOUNTS_TIMEOUT_MS,
+    );
+    if (result === timeoutSentinel) {
+      console.log('[host] getProductAccountAlias timed out');
+      return null;
+    }
+    if (!result.isOk()) {
+      console.warn('[host] getProductAccountAlias failed:', result.error);
+      return null;
+    }
+    const bytes = result.value.alias;
+    if (!bytes || bytes.length === 0) return null;
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    return decoded.length > 0 ? decoded : null;
+  } catch (error) {
+    console.warn('[host] getProductAccountAlias threw:', error);
+    return null;
+  }
 }
 
 // One-shot connect. Returns the first logged-in host account, or null when:
@@ -168,7 +206,14 @@ export async function connectToHost(): Promise<HostAccount | null> {
       console.warn('[host] getProductAccount failed:', productResult.error);
     } else {
       console.log('[host] connectToHost: got product account', productResult.value.name);
-      return toProductHostAccount(productResult.value, THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX);
+      const alias = await fetchProductAlias(THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX);
+      console.log('[host] connectToHost: product alias →', alias);
+      return toProductHostAccount(
+        productResult.value,
+        THR33S_DOTNS_ID,
+        THR33S_DERIVATION_INDEX,
+        alias,
+      );
     }
 
     console.log('[host] connectToHost: falling back to non-product accounts');

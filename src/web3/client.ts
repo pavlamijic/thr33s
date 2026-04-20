@@ -226,14 +226,29 @@ export class PolkadotClient {
     };
   }
 
-  // Check if an account is mapped
+  // Check if an account is mapped. Races with a short timeout because
+  // the host bridge's storage-read RPC occasionally never resolves; in
+  // that case we return false and let the caller fall through to a
+  // `map_account` tx which handles `AccountAlreadyMapped` itself.
   private async checkIfAccountMapped(substrateAddress: string): Promise<boolean> {
+    const TIMEOUT_MS = 5_000;
     try {
       const evmAddress = await this.getEvmAddress(substrateAddress);
       const key = Binary.fromHex(evmAddress);
-      const mappedAccount = await this.api.query.Revive.OriginalAccount.getValue(key);
-      return mappedAccount !== null && mappedAccount !== undefined;
-    } catch {
+      const timeoutMarker = Symbol('timeout');
+      const result = await Promise.race([
+        this.api.query.Revive.OriginalAccount.getValue(key),
+        new Promise<typeof timeoutMarker>((resolve) =>
+          setTimeout(() => resolve(timeoutMarker), TIMEOUT_MS),
+        ),
+      ]);
+      if (result === timeoutMarker) {
+        console.log('[submit] checkIfAccountMapped timed out — assuming unmapped');
+        return false;
+      }
+      return result !== null && result !== undefined;
+    } catch (error) {
+      console.warn('[submit] checkIfAccountMapped threw:', error);
       return false;
     }
   }

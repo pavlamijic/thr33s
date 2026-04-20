@@ -110,6 +110,12 @@ export async function requestHostLogin(reason?: string): Promise<boolean> {
   }
 }
 
+// `accountsProvider.getLegacyAccounts()` silently hangs when the user is
+// not signed in to the host (confirmed on dot.li 2026-04-19). Race it with
+// a timeout so the UI can fall back to asking the user to sign in instead
+// of spinning forever.
+const GET_ACCOUNTS_TIMEOUT_MS = 3_000;
+
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
     console.log('[host] connectToHost: injecting spektr extension');
@@ -118,7 +124,19 @@ export async function connectToHost(): Promise<HostAccount | null> {
     if (!injected) return null;
 
     console.log('[host] connectToHost: fetching legacy accounts');
-    const result = await accountsProvider.getLegacyAccounts();
+    const timeoutSentinel = Symbol('timeout');
+    const result = await Promise.race([
+      accountsProvider.getLegacyAccounts(),
+      new Promise<typeof timeoutSentinel>((resolve) =>
+        setTimeout(() => resolve(timeoutSentinel), GET_ACCOUNTS_TIMEOUT_MS),
+      ),
+    ]);
+
+    if (result === timeoutSentinel) {
+      console.log('[host] connectToHost: getLegacyAccounts timed out — user likely not signed in');
+      return null;
+    }
+
     if (!result.isOk()) {
       console.warn('[host] getLegacyAccounts failed:', result.error);
       return null;

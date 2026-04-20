@@ -17,6 +17,7 @@ import {
 } from './ui/modals';
 import { getDisplayName, getPopName, truncateAddress } from './web3/pop-stable';
 import { walletService } from './web3/wallet';
+import { isInHost } from './web3/host-wallet';
 import { leaderboardService } from './web3/leaderboard';
 import {
   initAudio,
@@ -210,6 +211,31 @@ function handleConnectWallet(): void {
 
 // Handle wallet connection for score submission (returns success status)
 async function handleConnectWalletForSubmission(): Promise<boolean> {
+  // Inside a Triangle host (dot.li / polkadot-desktop), browser wallet
+  // extensions are blocked by the sandbox. Ask the host to open its
+  // Polkadot-app sign-in flow instead of showing the picker.
+  if (isInHost()) {
+    const closeLoading = showLoadingModal('Signing in with your Polkadot app...');
+    try {
+      const connected = await walletService.promptHostLogin(
+        'Sign in to submit your Thr33s score',
+      );
+      closeLoading();
+      if (connected) return true;
+      showErrorModal(
+        'Could not sign in. Open the Polkadot app sign-in from the topbar and try again.',
+      );
+      return false;
+    } catch (error) {
+      closeLoading();
+      console.error('Host sign-in failed:', error);
+      showErrorModal(
+        `Sign-in failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return false;
+    }
+  }
+
   const providers = walletService.getInstalledProviders();
 
   if (providers.length === 0) {

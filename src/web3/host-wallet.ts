@@ -68,7 +68,31 @@ export function isInHost(): boolean {
 const accountsProvider = createAccountsProvider();
 const accountIdCodec = AccountId();
 
-function rawToHostAccount(raw: { publicKey: Uint8Array; name: string | undefined }): HostAccount {
+// dot.li / DotNS identifier for thr33s. Must match what we registered via
+// the deploy workflow, otherwise `getProductAccount` returns empty for the
+// signed-in user.
+const THR33S_DOTNS_ID = 'playthrees33.dot';
+const THR33S_DERIVATION_INDEX = 0;
+
+function toProductHostAccount(
+  raw: { publicKey: Uint8Array; name: string | undefined },
+  dotNsIdentifier: string,
+  derivationIndex: number,
+): HostAccount {
+  const productAccount: ProductAccount = {
+    publicKey: raw.publicKey,
+    dotNsIdentifier,
+    derivationIndex,
+  };
+  return {
+    address: accountIdCodec.dec(raw.publicKey),
+    name: raw.name || 'Account',
+    publicKey: raw.publicKey,
+    signer: accountsProvider.getProductAccountSigner(productAccount),
+  };
+}
+
+function toLegacyHostAccount(raw: { publicKey: Uint8Array; name: string | undefined }): HostAccount {
   const productAccount: ProductAccount = {
     publicKey: raw.publicKey,
     dotNsIdentifier: '',
@@ -124,10 +148,14 @@ function raceWithTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | ty
   ]);
 }
 
-// Tries the PoP-era API first (`getRootAccount` — returns the single
-// attested identity of a Polkadot-app user like `daemia.99`), then falls
-// back to `getLegacyAccounts()` for pre-PoP hosts. Either path short-
-// circuits on a 3s timeout so a hung call doesn't freeze the UI.
+// For Polkadot-app / dot.li users, the canonical API is
+// `getProductAccount(dotNsIdentifier, derivationIndex)` — it returns a
+// deterministic sub-account of the user's root identity, derived per
+// dApp. Pattern copied from `refs/t3rminal/lib/host/accounts.ts`, which
+// is the only shipping app we've found where the account flow actually
+// works end-to-end with a signed-in Polkadot-app user. `getRootAccount`
+// and `getLegacyAccounts` appear to hang on the current dot.li build.
+// Timeout fallbacks remain in place as a safety net.
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
     console.log('[host] connectToHost: injecting spektr extension');
@@ -135,7 +163,27 @@ export async function connectToHost(): Promise<HostAccount | null> {
     console.log('[host] connectToHost: injectSpektrExtension →', injected);
     if (!injected) return null;
 
-    console.log('[host] connectToHost: fetching root account');
+    console.log(
+      '[host] connectToHost: fetching product account',
+      THR33S_DOTNS_ID,
+      '#',
+      THR33S_DERIVATION_INDEX,
+    );
+    const productResult = await raceWithTimeout(
+      accountsProvider.getProductAccount(THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX),
+      GET_ACCOUNTS_TIMEOUT_MS,
+    );
+
+    if (productResult === timeoutSentinel) {
+      console.log('[host] connectToHost: getProductAccount timed out');
+    } else if (!productResult.isOk()) {
+      console.warn('[host] getProductAccount failed:', productResult.error);
+    } else {
+      console.log('[host] connectToHost: got product account', productResult.value.name);
+      return toProductHostAccount(productResult.value, THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX);
+    }
+
+    console.log('[host] connectToHost: falling back to root account');
     const rootResult = await raceWithTimeout(
       accountsProvider.getRootAccount(),
       GET_ACCOUNTS_TIMEOUT_MS,
@@ -147,7 +195,7 @@ export async function connectToHost(): Promise<HostAccount | null> {
       console.warn('[host] getRootAccount failed:', rootResult.error);
     } else {
       console.log('[host] connectToHost: got root account', rootResult.value.name);
-      return rawToHostAccount(rootResult.value);
+      return toLegacyHostAccount(rootResult.value);
     }
 
     console.log('[host] connectToHost: falling back to legacy accounts');
@@ -168,7 +216,7 @@ export async function connectToHost(): Promise<HostAccount | null> {
     console.log('[host] connectToHost: got', raw.length, 'legacy accounts');
     if (raw.length === 0) return null;
 
-    return rawToHostAccount(raw[0]);
+    return toLegacyHostAccount(raw[0]);
   } catch (error) {
     console.warn('[host] connectToHost threw:', error);
     return null;
@@ -190,10 +238,8 @@ export function subscribeHostConnection(
     }
     if (status === 'connected') {
       try {
-        const result = await accountsProvider.getLegacyAccounts();
-        if (result.isOk() && result.value.length > 0) {
-          onConnect(rawToHostAccount(result.value[0]));
-        }
+        const account = await connectToHost();
+        if (account) onConnect(account);
       } catch (error) {
         console.warn('[host] re-fetch on reconnect failed:', error);
       }

@@ -144,15 +144,21 @@ export class PolkadotClient {
   async connect(): Promise<void> {
     if (this.client) return;
 
-    // `createPapiProvider` (from product-sdk) and `getWsProvider` (from
-    // polkadot-api) return structurally-identical JsonRpcProvider objects
-    // typed against different nested copies of the provider interface.
-    // `any` bridges them without suppressing real call-site errors.
-    const provider = isInHost()
-      ? (createPapiProvider(CONFIG.paseoAssetHubGenesisHash) as any)
-      : getWsProvider(CONFIG.rpcEndpoint);
-
-    this.client = createClient(withPolkadotSdkCompat(provider));
+    // Inside the host: route through the sandbox-safe provider AND skip
+    // `withPolkadotSdkCompat`. The compat wrapper calls `rpc_methods` at
+    // construction to discover what the node supports; dot.li's HostAPI
+    // doesn't support that RPC method and the resulting error trips
+    // polkadot-api into an infinite retry loop (observed 2026-04-20 as
+    // `Method "rpc_methods" is not supported by HostAPI` followed by
+    // `Maximum call stack size exceeded`). Match dotli-starter's shape:
+    // bare `createClient(createPapiProvider(...))`.
+    if (isInHost()) {
+      const provider = createPapiProvider(CONFIG.paseoAssetHubGenesisHash) as any;
+      this.client = createClient(provider);
+    } else {
+      const provider = getWsProvider(CONFIG.rpcEndpoint);
+      this.client = createClient(withPolkadotSdkCompat(provider));
+    }
 
     // Get the untyped API for ReviveApi access
     this.api = this.client.getUnsafeApi();

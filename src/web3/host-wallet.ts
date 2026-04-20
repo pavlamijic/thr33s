@@ -90,12 +90,16 @@ function toProductHostAccount(
     dotNsIdentifier,
     derivationIndex,
   };
+  const rawName = raw.name?.trim() || null;
+  // If `getProductAccountAlias` failed (dot.li currently errors with
+  // `RequestCredentialsErr::Unknown`), use whatever the host labelled the
+  // account as — some hosts put the PoP handle there.
   return {
     address: accountIdCodec.dec(raw.publicKey),
-    name: raw.name || 'Account',
+    name: rawName || 'Account',
     publicKey: raw.publicKey,
     signer: accountsProvider.getProductAccountSigner(productAccount),
-    alias,
+    alias: alias ?? rawName,
   };
 }
 
@@ -205,7 +209,10 @@ export async function connectToHost(): Promise<HostAccount | null> {
     } else if (!productResult.isOk()) {
       console.warn('[host] getProductAccount failed:', productResult.error);
     } else {
-      console.log('[host] connectToHost: got product account', productResult.value.name);
+      console.log(
+        '[host] connectToHost: got product account name=',
+        JSON.stringify(productResult.value.name),
+      );
       const alias = await fetchProductAlias(THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX);
       console.log('[host] connectToHost: product alias →', alias);
       return toProductHostAccount(

@@ -6,6 +6,7 @@ import { CONFIG } from './config';
 import {
   connectToHost,
   isInHost,
+  requestTransactionSubmitPermission,
   subscribeHostConnection,
   type HostAccount,
 } from './host-wallet';
@@ -176,6 +177,16 @@ export class WalletService {
     this.emit({
       type: 'connect',
       address: account.address,
+    });
+
+    // Ask the host for TransactionSubmit permission immediately after a
+    // successful connect. dot.li silently denies every `signSubmitAndWatch`
+    // call until this is granted, so we pre-arm it so the first score
+    // submission doesn't fail with SigningErr::PermissionDenied. Fire-and-
+    // forget: if the user denies, the subsequent submit will surface the
+    // error with a real dialog.
+    void requestTransactionSubmitPermission().catch((error) => {
+      console.warn('[host] TransactionSubmit pre-arm failed:', error);
     });
   }
 

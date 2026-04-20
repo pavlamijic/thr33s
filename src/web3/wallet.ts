@@ -6,7 +6,6 @@ import { CONFIG } from './config';
 import {
   connectToHost,
   isInHost,
-  requestHostLogin,
   subscribeHostConnection,
   type HostAccount,
 } from './host-wallet';
@@ -144,15 +143,26 @@ export class WalletService {
     return true;
   }
 
-  // User-triggered equivalent of `connectFromHost`: first asks the host to
-  // open its sign-in UI (Polkadot app QR, etc.), then re-attempts the
-  // account fetch. Use when the initial eager `connectFromHost()` returned
-  // false because the user hadn't signed in yet.
-  async promptHostLogin(reason?: string): Promise<boolean> {
-    if (!isInHost()) return false;
-    const loggedIn = await requestHostLogin(reason);
-    if (!loggedIn) return false;
-    return this.connectFromHost();
+  // Resolve when a `connect` event fires (e.g. the user signs in via the
+  // dot.li topbar while we wait), or when the timeout elapses. Use after
+  // `connectFromHost()` returns false to give the user a chance to sign
+  // in without re-clicking a button.
+  waitForConnection(timeoutMs: number): Promise<boolean> {
+    if (this.isConnected()) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        clearTimeout(timer);
+        resolve(ok);
+      };
+      const unsubscribe = this.subscribe((event) => {
+        if (event.type === 'connect') finish(true);
+      });
+      const timer = setTimeout(() => finish(false), timeoutMs);
+    });
   }
 
   private applyHostAccount(account: HostAccount): void {

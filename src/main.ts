@@ -212,28 +212,26 @@ function handleConnectWallet(): void {
 // Handle wallet connection for score submission (returns success status)
 async function handleConnectWalletForSubmission(): Promise<boolean> {
   // Inside a Triangle host (dot.li / polkadot-desktop), browser wallet
-  // extensions are blocked by the sandbox. Ask the host to open its
-  // Polkadot-app sign-in flow instead of showing the picker.
+  // extensions are blocked by the sandbox. Wait passively for the user to
+  // sign in via the host's topbar — same pattern as ignite / p2p-market
+  // (the host SDK doesn't surface a reliable in-product sign-in prompt).
   if (isInHost()) {
-    const closeLoading = showLoadingModal('Signing in with your Polkadot app...');
-    try {
-      const connected = await walletService.promptHostLogin(
-        'Sign in to submit your Thr33s score',
-      );
-      closeLoading();
-      if (connected) return true;
-      showErrorModal(
-        'Could not sign in. Open the Polkadot app sign-in from the topbar and try again.',
-      );
-      return false;
-    } catch (error) {
-      closeLoading();
-      console.error('Host sign-in failed:', error);
-      showErrorModal(
-        `Sign-in failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      return false;
-    }
+    // A subscription from `connectFromHost` auto-connects on sign-in; a
+    // retry here catches the edge case where the user signed in between
+    // initial page load and now.
+    if (await walletService.connectFromHost()) return true;
+
+    const closeLoading = showLoadingModal(
+      'Sign in with the Polkadot app using the topbar. This will continue automatically once you are signed in.',
+    );
+    const connected = await walletService.waitForConnection(120_000);
+    closeLoading();
+
+    if (connected) return true;
+    showErrorModal(
+      'No sign-in detected. Open the Polkadot-app sign-in from the topbar and try Connect Wallet again.',
+    );
+    return false;
   }
 
   const providers = walletService.getInstalledProviders();

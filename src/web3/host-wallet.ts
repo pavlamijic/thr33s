@@ -110,12 +110,24 @@ export async function requestHostLogin(reason?: string): Promise<boolean> {
   }
 }
 
-// `accountsProvider.getLegacyAccounts()` silently hangs when the user is
-// not signed in to the host (confirmed on dot.li 2026-04-19). Race it with
-// a timeout so the UI can fall back to asking the user to sign in instead
-// of spinning forever.
+// Account-fetch calls can silently hang when the host can't fulfil them
+// (e.g. user in the wrong auth state for the API being called). Race with
+// a short timeout so the UI can move on and try the next strategy.
 const GET_ACCOUNTS_TIMEOUT_MS = 3_000;
 
+const timeoutSentinel = Symbol('timeout');
+
+function raceWithTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | typeof timeoutSentinel> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<typeof timeoutSentinel>((resolve) => setTimeout(() => resolve(timeoutSentinel), ms)),
+  ]);
+}
+
+// Tries the PoP-era API first (`getRootAccount` — returns the single
+// attested identity of a Polkadot-app user like `daemia.99`), then falls
+// back to `getLegacyAccounts()` for pre-PoP hosts. Either path short-
+// circuits on a 3s timeout so a hung call doesn't freeze the UI.
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
     console.log('[host] connectToHost: injecting spektr extension');
@@ -123,27 +135,37 @@ export async function connectToHost(): Promise<HostAccount | null> {
     console.log('[host] connectToHost: injectSpektrExtension →', injected);
     if (!injected) return null;
 
-    console.log('[host] connectToHost: fetching legacy accounts');
-    const timeoutSentinel = Symbol('timeout');
-    const result = await Promise.race([
+    console.log('[host] connectToHost: fetching root account');
+    const rootResult = await raceWithTimeout(
+      accountsProvider.getRootAccount(),
+      GET_ACCOUNTS_TIMEOUT_MS,
+    );
+
+    if (rootResult === timeoutSentinel) {
+      console.log('[host] connectToHost: getRootAccount timed out');
+    } else if (!rootResult.isOk()) {
+      console.warn('[host] getRootAccount failed:', rootResult.error);
+    } else {
+      console.log('[host] connectToHost: got root account', rootResult.value.name);
+      return rawToHostAccount(rootResult.value);
+    }
+
+    console.log('[host] connectToHost: falling back to legacy accounts');
+    const legacyResult = await raceWithTimeout(
       accountsProvider.getLegacyAccounts(),
-      new Promise<typeof timeoutSentinel>((resolve) =>
-        setTimeout(() => resolve(timeoutSentinel), GET_ACCOUNTS_TIMEOUT_MS),
-      ),
-    ]);
+      GET_ACCOUNTS_TIMEOUT_MS,
+    );
 
-    if (result === timeoutSentinel) {
-      console.log('[host] connectToHost: getLegacyAccounts timed out — user likely not signed in');
+    if (legacyResult === timeoutSentinel) {
+      console.log('[host] connectToHost: getLegacyAccounts timed out');
       return null;
     }
-
-    if (!result.isOk()) {
-      console.warn('[host] getLegacyAccounts failed:', result.error);
+    if (!legacyResult.isOk()) {
+      console.warn('[host] getLegacyAccounts failed:', legacyResult.error);
       return null;
     }
-
-    const raw = result.value;
-    console.log('[host] connectToHost: got', raw.length, 'accounts');
+    const raw = legacyResult.value;
+    console.log('[host] connectToHost: got', raw.length, 'legacy accounts');
     if (raw.length === 0) return null;
 
     return rawToHostAccount(raw[0]);

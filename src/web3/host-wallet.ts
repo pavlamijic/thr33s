@@ -102,7 +102,7 @@ function toLegacyHostAccount(raw: { publicKey: Uint8Array; name: string | undefi
     address: accountIdCodec.dec(raw.publicKey),
     name: raw.name || 'Account',
     publicKey: raw.publicKey,
-    signer: accountsProvider.getLegacyAccountSigner(productAccount),
+    signer: accountsProvider.getNonProductAccountSigner(productAccount),
   };
 }
 
@@ -114,24 +114,12 @@ function toLegacyHostAccount(raw: { publicKey: Uint8Array; name: string | undefi
 // For the "user signs in after the page loaded" case the caller should
 // `subscribeHostConnection` and re-call this when the status flips to
 // `connected`.
-// Prompt the host (dot.li topbar / polkadot-desktop) to sign the user in,
-// e.g. via the Polkadot app QR flow. Returns true if the user signed in or
-// was already signed in, false if they rejected or the flow failed. The
-// caller should follow up with `connectToHost()` (or rely on the existing
-// `subscribeAccountConnectionStatus` subscription) to pick up the account.
-export async function requestHostLogin(reason?: string): Promise<boolean> {
-  try {
-    const result = await accountsProvider.requestLogin(reason);
-    if (!result.isOk()) {
-      console.warn('[host] requestLogin failed:', result.error);
-      return false;
-    }
-    const status = result.value;
-    return status === 'success' || status === 'alreadyConnected';
-  } catch (error) {
-    console.warn('[host] requestLogin threw:', error);
-    return false;
-  }
+// Placeholder — product-sdk 0.6.x has no `requestLogin` API. Callers should
+// fall back to the passive-wait pattern (show 'sign in via topbar' modal,
+// subscribe to connection status). Kept as a stub for when the SDK lands
+// a stable trigger-sign-in method.
+export async function requestHostLogin(_reason?: string): Promise<boolean> {
+  return false;
 }
 
 // Account-fetch calls can silently hang when the host can't fulfil them
@@ -154,7 +142,7 @@ function raceWithTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | ty
 // dApp. Pattern copied from `refs/t3rminal/lib/host/accounts.ts`, which
 // is the only shipping app we've found where the account flow actually
 // works end-to-end with a signed-in Polkadot-app user. `getRootAccount`
-// and `getLegacyAccounts` appear to hang on the current dot.li build.
+// and `getNonProductAccounts` appear to hang on the current dot.li build.
 // Timeout fallbacks remain in place as a safety net.
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
@@ -183,37 +171,22 @@ export async function connectToHost(): Promise<HostAccount | null> {
       return toProductHostAccount(productResult.value, THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX);
     }
 
-    console.log('[host] connectToHost: falling back to root account');
-    const rootResult = await raceWithTimeout(
-      accountsProvider.getRootAccount(),
-      GET_ACCOUNTS_TIMEOUT_MS,
-    );
-
-    if (rootResult === timeoutSentinel) {
-      console.log('[host] connectToHost: getRootAccount timed out');
-    } else if (!rootResult.isOk()) {
-      console.warn('[host] getRootAccount failed:', rootResult.error);
-    } else {
-      console.log('[host] connectToHost: got root account', rootResult.value.name);
-      return toLegacyHostAccount(rootResult.value);
-    }
-
-    console.log('[host] connectToHost: falling back to legacy accounts');
+    console.log('[host] connectToHost: falling back to non-product accounts');
     const legacyResult = await raceWithTimeout(
-      accountsProvider.getLegacyAccounts(),
+      accountsProvider.getNonProductAccounts(),
       GET_ACCOUNTS_TIMEOUT_MS,
     );
 
     if (legacyResult === timeoutSentinel) {
-      console.log('[host] connectToHost: getLegacyAccounts timed out');
+      console.log('[host] connectToHost: getNonProductAccounts timed out');
       return null;
     }
     if (!legacyResult.isOk()) {
-      console.warn('[host] getLegacyAccounts failed:', legacyResult.error);
+      console.warn('[host] getNonProductAccounts failed:', legacyResult.error);
       return null;
     }
     const raw = legacyResult.value;
-    console.log('[host] connectToHost: got', raw.length, 'legacy accounts');
+    console.log('[host] connectToHost: got', raw.length, 'non-product accounts');
     if (raw.length === 0) return null;
 
     return toLegacyHostAccount(raw[0]);

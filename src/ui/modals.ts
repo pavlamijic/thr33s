@@ -34,7 +34,8 @@ export function showGameOverModal(
   isWalletConnected: () => boolean,
   onSubmitScore: () => Promise<void>,
   onConnectWallet: () => Promise<boolean>,
-  onPlayAgain: () => void
+  onPlayAgain: () => void,
+  connectLabel: string = 'Connect Wallet to Submit',
 ): ModalCloseCallback {
   const modalsContainer = document.getElementById('modals')!;
 
@@ -52,7 +53,7 @@ export function showGameOverModal(
         <button class="btn btn-secondary" id="play-again-btn">Play Again</button>
       `
       : `
-        <button class="btn btn-primary" id="connect-wallet-btn">Connect Wallet to Submit</button>
+        <button class="btn btn-primary" id="connect-wallet-btn">${connectLabel}</button>
         <button class="btn btn-secondary" id="play-again-btn">Play Again</button>
       `;
 

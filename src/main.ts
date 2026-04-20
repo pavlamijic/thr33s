@@ -180,7 +180,8 @@ function handleGameOver(score: number, highestTile: number): void {
     () => handleConnectWalletForSubmission(),
     () => {
       gameState.newGame();
-    }
+    },
+    isInHost() ? 'Sign in with Polkadot App to Submit' : 'Connect Wallet to Submit',
   );
 }
 
@@ -211,25 +212,29 @@ function handleConnectWallet(): void {
 
 // Handle wallet connection for score submission (returns success status)
 async function handleConnectWalletForSubmission(): Promise<boolean> {
+  console.log('[connect] clicked; isInHost=', isInHost(), 'connected=', walletService.isConnected());
+
   // Inside a Triangle host (dot.li / polkadot-desktop), browser wallet
   // extensions are blocked by the sandbox. Wait passively for the user to
   // sign in via the host's topbar — same pattern as ignite / p2p-market
   // (the host SDK doesn't surface a reliable in-product sign-in prompt).
   if (isInHost()) {
-    // A subscription from `connectFromHost` auto-connects on sign-in; a
-    // retry here catches the edge case where the user signed in between
-    // initial page load and now.
-    if (await walletService.connectFromHost()) return true;
+    console.log('[connect] trying connectFromHost');
+    const alreadyConnected = await walletService.connectFromHost();
+    console.log('[connect] connectFromHost →', alreadyConnected);
+    if (alreadyConnected) return true;
 
+    console.log('[connect] showing sign-in-via-topbar modal');
     const closeLoading = showLoadingModal(
       'Sign in with the Polkadot app using the topbar. This will continue automatically once you are signed in.',
     );
     const connected = await walletService.waitForConnection(120_000);
     closeLoading();
+    console.log('[connect] waitForConnection →', connected);
 
     if (connected) return true;
     showErrorModal(
-      'No sign-in detected. Open the Polkadot-app sign-in from the topbar and try Connect Wallet again.',
+      'No sign-in detected. Open the Polkadot-app sign-in from the topbar and click again.',
     );
     return false;
   }
@@ -308,7 +313,7 @@ function updateWalletButton(): void {
     }
   } else {
     walletButtonAddress = null;
-    walletBtn.textContent = 'Connect Wallet';
+    walletBtn.textContent = isInHost() ? 'Sign in with Polkadot App' : 'Connect Wallet';
     walletBtn.classList.remove('wallet-connected');
     walletBtn.onclick = handleConnectWallet;
   }

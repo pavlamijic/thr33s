@@ -270,16 +270,21 @@ export class PolkadotClient {
   ): Promise<void> {
     if (this.mappedAccounts.has(substrateAddress)) return;
 
+    console.log('[submit] checkIfAccountMapped', substrateAddress);
     const isMapped = await this.checkIfAccountMapped(substrateAddress);
+    console.log('[submit] checkIfAccountMapped →', isMapped);
     if (isMapped) {
       this.mappedAccounts.add(substrateAddress);
       return;
     }
 
+    console.log('[submit] submitting Revive.map_account tx');
     const mappingExtrinsic = this.api.tx.Revive.map_account();
 
     try {
-      await this.signAndSubmitExtrinsic(mappingExtrinsic, signer, () => {});
+      await this.signAndSubmitExtrinsic(mappingExtrinsic, signer, (status) => {
+        console.log('[submit] map_account status=', status);
+      });
       this.mappedAccounts.add(substrateAddress);
     } catch (error: any) {
       const errorMessage = error?.message || String(error);
@@ -291,7 +296,9 @@ export class PolkadotClient {
     }
   }
 
-  // Sign and submit an extrinsic
+  // Sign and submit an extrinsic. Mortality matches dotli-starter's
+  // remark flow — immortal extrinsics can make the host's tx pool reject
+  // submissions when the nonce is stale, which looks identical to a hang.
   private signAndSubmitExtrinsic(
     extrinsic: any,
     signer: PolkadotSigner,
@@ -299,42 +306,47 @@ export class PolkadotClient {
   ): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       try {
-        extrinsic.signSubmitAndWatch(signer).subscribe({
-          next: (event: any) => {
-            const transactionHash = event.txHash?.toString();
+        extrinsic
+          .signSubmitAndWatch(signer, { mortality: { mortal: true, period: 256 } })
+          .subscribe({
+            next: (event: any) => {
+              console.log('[submit] tx event:', event.type);
+              const transactionHash = event.txHash?.toString();
 
-            switch (event.type) {
-              case 'signed':
-                statusCallback('signing');
-                break;
-              case 'broadcasted':
-                statusCallback('broadcasting');
-                break;
-              case 'txBestBlocksState':
-                statusCallback('included');
-                break;
-              case 'finalized':
-                if (event.dispatchError) {
-                  statusCallback('failed');
-                  reject(new Error(`Transaction failed: ${event.dispatchError.toString()}`));
+              switch (event.type) {
+                case 'signed':
+                  statusCallback('signing');
+                  break;
+                case 'broadcasted':
+                  statusCallback('broadcasting');
+                  break;
+                case 'txBestBlocksState':
+                  statusCallback('included');
+                  break;
+                case 'finalized':
+                  if (event.dispatchError) {
+                    statusCallback('failed');
+                    reject(new Error(`Transaction failed: ${event.dispatchError.toString()}`));
+                    return;
+                  }
+                  statusCallback('finalized');
+                  resolve(transactionHash);
                   return;
-                }
-                statusCallback('finalized');
-                resolve(transactionHash);
-                return;
-              case 'invalid':
-              case 'dropped':
-                statusCallback('failed');
-                reject(new Error(`Transaction ${event.type}`));
-                return;
-            }
-          },
-          error: (error: any) => {
-            statusCallback('failed');
-            reject(error);
-          },
-        });
+                case 'invalid':
+                case 'dropped':
+                  statusCallback('failed');
+                  reject(new Error(`Transaction ${event.type}`));
+                  return;
+              }
+            },
+            error: (error: any) => {
+              console.warn('[submit] tx error:', error);
+              statusCallback('failed');
+              reject(error);
+            },
+          });
       } catch (error) {
+        console.warn('[submit] signSubmitAndWatch threw:', error);
         statusCallback('failed');
         reject(error);
       }
@@ -354,8 +366,11 @@ export class PolkadotClient {
       throw new Error('Client not connected');
     }
 
+    console.log('[submit] begin; from=', signerSubstrateAddress);
+
     await this.ensureAccountMapped(signerSubstrateAddress, signer);
 
+    console.log('[submit] performDryRunCall begin');
     // Estimate gas
     const gasEstimate = await this.performDryRunCall(
       signerSubstrateAddress,
@@ -363,6 +378,7 @@ export class PolkadotClient {
       valueInNativeUnits,
       encodedData
     );
+    console.log('[submit] performDryRunCall done; ok=', gasEstimate.result.isOk);
 
     if (!gasEstimate.result.isOk) {
       throw new Error(`Contract execution would revert: ${gasEstimate.result.value.data ?? '0x'}`);

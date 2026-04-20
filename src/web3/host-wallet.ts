@@ -73,79 +73,26 @@ export function isInHost(): boolean {
 const accountsProvider = createAccountsProvider();
 const accountIdCodec = AccountId();
 
-// dot.li / DotNS identifier for thr33s. Must match what we registered via
-// the deploy workflow, otherwise `getProductAccount` returns empty for the
-// signed-in user.
-const THR33S_DOTNS_ID = 'playthrees33.dot';
-const THR33S_DERIVATION_INDEX = 0;
-
-function toProductHostAccount(
-  raw: { publicKey: Uint8Array; name: string | undefined },
-  dotNsIdentifier: string,
-  derivationIndex: number,
-  alias: string | null,
-): HostAccount {
-  const productAccount: ProductAccount = {
-    publicKey: raw.publicKey,
-    dotNsIdentifier,
-    derivationIndex,
-  };
-  const rawName = raw.name?.trim() || null;
-  // If `getProductAccountAlias` failed (dot.li currently errors with
-  // `RequestCredentialsErr::Unknown`), use whatever the host labelled the
-  // account as — some hosts put the PoP handle there.
-  return {
-    address: accountIdCodec.dec(raw.publicKey),
-    name: rawName || 'Account',
-    publicKey: raw.publicKey,
-    signer: accountsProvider.getProductAccountSigner(productAccount),
-    alias: alias ?? rawName,
-  };
-}
-
-function toLegacyHostAccount(raw: { publicKey: Uint8Array; name: string | undefined }): HostAccount {
+function toHostAccount(raw: { publicKey: Uint8Array; name: string | undefined }): HostAccount {
+  // The SDK's signer only uses `publicKey` at runtime, but TypeScript
+  // requires the full ProductAccount shape — fake the rest.
   const productAccount: ProductAccount = {
     publicKey: raw.publicKey,
     dotNsIdentifier: '',
     derivationIndex: 0,
   };
+  const rawName = raw.name?.trim() || null;
   return {
     address: accountIdCodec.dec(raw.publicKey),
-    name: raw.name || 'Account',
+    name: rawName || 'Account',
     publicKey: raw.publicKey,
+    // `getNonProductAccountSigner` matches dotli-starter's pattern — works
+    // with both PoP and pre-PoP accounts returned from `getNonProductAccounts`.
     signer: accountsProvider.getNonProductAccountSigner(productAccount),
-    alias: null,
+    // The host populates `name` with the user's PoP handle (e.g. "daemia.99")
+    // when available, so reuse it as the alias displayed on the wallet button.
+    alias: rawName,
   };
-}
-
-// Fetch the PoP-attested alias for the product account. The host returns
-// `{ context, alias }` where `alias` is raw UTF-8 bytes (the name the user
-// enrolled under, e.g. "daemia.99"). Null on timeout / failure / empty.
-async function fetchProductAlias(
-  dotNsIdentifier: string,
-  derivationIndex: number,
-): Promise<string | null> {
-  try {
-    const result = await raceWithTimeout(
-      accountsProvider.getProductAccountAlias(dotNsIdentifier, derivationIndex),
-      GET_ACCOUNTS_TIMEOUT_MS,
-    );
-    if (result === timeoutSentinel) {
-      console.log('[host] getProductAccountAlias timed out');
-      return null;
-    }
-    if (!result.isOk()) {
-      console.warn('[host] getProductAccountAlias failed:', result.error);
-      return null;
-    }
-    const bytes = result.value.alias;
-    if (!bytes || bytes.length === 0) return null;
-    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-    return decoded.length > 0 ? decoded : null;
-  } catch (error) {
-    console.warn('[host] getProductAccountAlias threw:', error);
-    return null;
-  }
 }
 
 // One-shot connect. Returns the first logged-in host account, or null when:
@@ -166,8 +113,9 @@ export async function requestHostLogin(_reason?: string): Promise<boolean> {
 
 // Account-fetch calls can silently hang when the host can't fulfil them
 // (e.g. user in the wrong auth state for the API being called). Race with
-// a short timeout so the UI can move on and try the next strategy.
-const GET_ACCOUNTS_TIMEOUT_MS = 3_000;
+// a short timeout so the UI can move on and try the next strategy. dot.li's
+// first call can be slow (sandbox handshake), so be generous.
+const GET_ACCOUNTS_TIMEOUT_MS = 15_000;
 
 const timeoutSentinel = Symbol('timeout');
 
@@ -178,14 +126,11 @@ function raceWithTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | ty
   ]);
 }
 
-// For Polkadot-app / dot.li users, the canonical API is
-// `getProductAccount(dotNsIdentifier, derivationIndex)` — it returns a
-// deterministic sub-account of the user's root identity, derived per
-// dApp. Pattern copied from `refs/t3rminal/lib/host/accounts.ts`, which
-// is the only shipping app we've found where the account flow actually
-// works end-to-end with a signed-in Polkadot-app user. `getRootAccount`
-// and `getNonProductAccounts` appear to hang on the current dot.li build.
-// Timeout fallbacks remain in place as a safety net.
+// Canonical dot.li pattern (copied from `refs/dotli-starter/src/main.js`):
+// call `getNonProductAccounts()` to get the user's real account, including
+// the PoP handle in the `name` field (e.g. "daemia.99"). t3rminal's
+// `getProductAccount` path gave us a per-dApp derived sub-account with no
+// name — wrong template for this host.
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
     console.log('[host] connectToHost: injecting spektr extension');
@@ -193,55 +138,30 @@ export async function connectToHost(): Promise<HostAccount | null> {
     console.log('[host] connectToHost: injectSpektrExtension →', injected);
     if (!injected) return null;
 
-    console.log(
-      '[host] connectToHost: fetching product account',
-      THR33S_DOTNS_ID,
-      '#',
-      THR33S_DERIVATION_INDEX,
-    );
-    const productResult = await raceWithTimeout(
-      accountsProvider.getProductAccount(THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX),
-      GET_ACCOUNTS_TIMEOUT_MS,
-    );
-
-    if (productResult === timeoutSentinel) {
-      console.log('[host] connectToHost: getProductAccount timed out');
-    } else if (!productResult.isOk()) {
-      console.warn('[host] getProductAccount failed:', productResult.error);
-    } else {
-      console.log(
-        '[host] connectToHost: got product account name=',
-        JSON.stringify(productResult.value.name),
-      );
-      const alias = await fetchProductAlias(THR33S_DOTNS_ID, THR33S_DERIVATION_INDEX);
-      console.log('[host] connectToHost: product alias →', alias);
-      return toProductHostAccount(
-        productResult.value,
-        THR33S_DOTNS_ID,
-        THR33S_DERIVATION_INDEX,
-        alias,
-      );
-    }
-
-    console.log('[host] connectToHost: falling back to non-product accounts');
-    const legacyResult = await raceWithTimeout(
+    console.log('[host] connectToHost: fetching non-product accounts');
+    const result = await raceWithTimeout(
       accountsProvider.getNonProductAccounts(),
       GET_ACCOUNTS_TIMEOUT_MS,
     );
 
-    if (legacyResult === timeoutSentinel) {
+    if (result === timeoutSentinel) {
       console.log('[host] connectToHost: getNonProductAccounts timed out');
       return null;
     }
-    if (!legacyResult.isOk()) {
-      console.warn('[host] getNonProductAccounts failed:', legacyResult.error);
+    if (!result.isOk()) {
+      console.warn('[host] getNonProductAccounts failed:', result.error);
       return null;
     }
-    const raw = legacyResult.value;
-    console.log('[host] connectToHost: got', raw.length, 'non-product accounts');
+    const raw = result.value;
+    console.log(
+      '[host] connectToHost: got',
+      raw.length,
+      'account(s); first name=',
+      JSON.stringify(raw[0]?.name),
+    );
     if (raw.length === 0) return null;
 
-    return toLegacyHostAccount(raw[0]);
+    return toHostAccount(raw[0]);
   } catch (error) {
     console.warn('[host] connectToHost threw:', error);
     return null;

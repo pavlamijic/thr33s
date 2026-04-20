@@ -81,6 +81,26 @@ function rawToHostAccount(raw: { publicKey: Uint8Array; name: string | undefined
 // For the "user signs in after the page loaded" case the caller should
 // `subscribeHostConnection` and re-call this when the status flips to
 // `connected`.
+// Prompt the host (dot.li topbar / polkadot-desktop) to sign the user in,
+// e.g. via the Polkadot app QR flow. Returns true if the user signed in or
+// was already signed in, false if they rejected or the flow failed. The
+// caller should follow up with `connectToHost()` (or rely on the existing
+// `subscribeAccountConnectionStatus` subscription) to pick up the account.
+export async function requestHostLogin(reason?: string): Promise<boolean> {
+  try {
+    const result = await accountsProvider.requestLogin(reason);
+    if (!result.isOk()) {
+      console.warn('[host] requestLogin failed:', result.error);
+      return false;
+    }
+    const status = result.value;
+    return status === 'success' || status === 'alreadyConnected';
+  } catch (error) {
+    console.warn('[host] requestLogin threw:', error);
+    return false;
+  }
+}
+
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
     const injected = await injectSpektrExtension();

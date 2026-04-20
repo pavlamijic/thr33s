@@ -19,6 +19,7 @@
 
 import {
   createAccountsProvider,
+  hostApi,
   injectSpektrExtension,
   sandboxProvider,
   type ProductAccount,
@@ -109,6 +110,30 @@ function toHostAccount(raw: { publicKey: Uint8Array; name: string | undefined })
 // a stable trigger-sign-in method.
 export async function requestHostLogin(_reason?: string): Promise<boolean> {
   return false;
+}
+
+// dot.li auto-denies every signing request until the dApp explicitly asks
+// for a `TransactionSubmit` permission (SigningErr::PermissionDenied is the
+// observable symptom). Granted permissions are persisted, so calling this
+// once per session is enough. Return true on success.
+export async function requestTransactionSubmitPermission(): Promise<boolean> {
+  try {
+    console.log('[host] requesting TransactionSubmit permission');
+    const result = await hostApi.permission({
+      tag: 'v1',
+      value: { tag: 'TransactionSubmit', value: undefined },
+    } as Parameters<typeof hostApi.permission>[0]);
+    if (result.isErr()) {
+      console.warn('[host] TransactionSubmit permission request errored:', result.error);
+      return false;
+    }
+    const granted = (result.value as any).value === true;
+    console.log('[host] TransactionSubmit permission →', granted);
+    return granted;
+  } catch (error) {
+    console.warn('[host] TransactionSubmit permission threw:', error);
+    return false;
+  }
 }
 
 // Account-fetch calls can silently hang when the host can't fulfil them

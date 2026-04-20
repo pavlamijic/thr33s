@@ -20,6 +20,7 @@
 import {
   createAccountsProvider,
   injectSpektrExtension,
+  sandboxProvider,
   type ProductAccount,
 } from '@novasamatech/product-sdk';
 import { AccountId, type PolkadotSigner } from 'polkadot-api';
@@ -51,7 +52,15 @@ export function detectHostEnvironment(): HostEnvironment {
   return 'standalone';
 }
 
+// Canonical detection used by the product-sdk itself. The hand-rolled
+// checks above can miss edge cases (e.g. dot.li's `document.write()` path
+// that re-anchors the window), so prefer this when available.
 export function isInHost(): boolean {
+  try {
+    if (sandboxProvider.isCorrectEnvironment()) return true;
+  } catch {
+    // fall through to heuristic
+  }
   return detectHostEnvironment() !== 'standalone';
 }
 
@@ -103,9 +112,12 @@ export async function requestHostLogin(reason?: string): Promise<boolean> {
 
 export async function connectToHost(): Promise<HostAccount | null> {
   try {
+    console.log('[host] connectToHost: injecting spektr extension');
     const injected = await injectSpektrExtension();
+    console.log('[host] connectToHost: injectSpektrExtension →', injected);
     if (!injected) return null;
 
+    console.log('[host] connectToHost: fetching legacy accounts');
     const result = await accountsProvider.getLegacyAccounts();
     if (!result.isOk()) {
       console.warn('[host] getLegacyAccounts failed:', result.error);
@@ -113,6 +125,7 @@ export async function connectToHost(): Promise<HostAccount | null> {
     }
 
     const raw = result.value;
+    console.log('[host] connectToHost: got', raw.length, 'accounts');
     if (raw.length === 0) return null;
 
     return rawToHostAccount(raw[0]);

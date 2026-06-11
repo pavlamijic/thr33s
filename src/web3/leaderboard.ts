@@ -1,8 +1,17 @@
-import { encodeFunctionData, createPublicClient, http, type Address, type Hex } from 'viem';
-import { LEADERBOARD_ABI } from './abi';
-import { CONFIG } from './config';
-import { polkadotClient, type TransactionStatus } from './client';
+// Leaderboard service. Reads (getTopScores / getPersonalBest / getPlayerRank)
+// are dry-run queries; submitScore is a signed Revive.call. All go through the
+// @parity/product-sdk-contracts handle, which resolves the signer + origin from
+// the shared SignerManager. No EVM RPC, no viem, no browser-wallet paths.
+
+import { getLeaderboardContract } from './client';
 import { walletService } from './wallet';
+
+export type TransactionStatus =
+  | 'signing'
+  | 'broadcasting'
+  | 'included'
+  | 'finalized'
+  | 'failed';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -12,154 +21,54 @@ export interface LeaderboardEntry {
   timestamp: number;
 }
 
-// Define the chain for viem
-const polkadotHubTestnet = {
-  id: CONFIG.chainId,
-  name: CONFIG.chainName,
-  nativeCurrency: {
-    decimals: CONFIG.currencyDecimals,
-    name: 'Paseo',
-    symbol: CONFIG.currencySymbol,
-  },
-  rpcUrls: {
-    default: { http: [CONFIG.evmRpcEndpoint] },
-  },
-  blockExplorers: {
-    default: { name: 'Blockscout', url: CONFIG.blockExplorer },
-  },
-};
+// pallet-revive auto-maps accounts on first tx on paseo-next-v2
+// (autoAccountMapping: true), so no explicit map_account is needed here.
+type AnyContract = Record<string, {
+  tx: (...args: unknown[]) => Promise<{ ok?: boolean; txHash?: string; dispatchError?: unknown }>;
+  query: (...args: unknown[]) => Promise<{ success: boolean; value: unknown }>;
+}>;
 
-// Create public client for read operations
-const publicClient = createPublicClient({
-  chain: polkadotHubTestnet,
-  transport: http(CONFIG.evmRpcEndpoint),
-});
+function num(value: unknown): number {
+  return typeof value === 'bigint' ? Number(value) : Number(value ?? 0);
+}
 
 export class LeaderboardService {
-  private isInitialized = false;
-
-  // Initialize the service
-  async initialize(): Promise<void> {
-    if (this.isInitialized) return;
-
-    // Only connect polkadot client for substrate wallets
-    if (walletService.getWalletType() === 'substrate') {
-      await polkadotClient.connect();
-    }
-    this.isInitialized = true;
-  }
-
-  // Submit a score to the leaderboard
   async submitScore(
     score: number,
     highestTile: number,
-    onStatus?: (status: TransactionStatus) => void
+    onStatus?: (status: TransactionStatus) => void,
   ): Promise<string> {
     if (!walletService.isConnected()) {
-      throw new Error('Wallet not connected');
+      throw new Error('Not signed in');
     }
 
-    const address = walletService.getAddress();
-    if (!address) {
-      throw new Error('No wallet address');
-    }
-
-    // Handle EVM wallet (MetaMask)
-    if (walletService.getWalletType() === 'evm') {
-      return this.submitScoreEvm(score, highestTile, address, onStatus);
-    }
-
-    // Handle Substrate wallet
-    await this.initialize();
-
-    const signer = walletService.getSigner();
-
-    // Encode the function call
-    const callData = encodeFunctionData({
-      abi: LEADERBOARD_ABI,
-      functionName: 'submitScore',
-      args: [BigInt(score), BigInt(highestTile)],
-    });
-
-    // Submit the transaction
-    const txHash = await polkadotClient.submitTransaction(
-      CONFIG.contractAddress,
-      0n,
-      callData as Hex,
-      address,
-      signer,
-      onStatus || (() => {})
-    );
-
-    return txHash;
-  }
-
-  // Submit score using EVM wallet (MetaMask)
-  private async submitScoreEvm(
-    score: number,
-    highestTile: number,
-    address: string,
-    onStatus?: (status: TransactionStatus) => void
-  ): Promise<string> {
-    const walletClient = walletService.getEvmWalletClient();
-    if (!walletClient) {
-      throw new Error('EVM wallet client not available');
-    }
+    const contract = (await getLeaderboardContract()) as unknown as AnyContract;
 
     onStatus?.('signing');
+    const result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile));
 
-    try {
-      // Send the transaction
-      const hash = await walletClient.writeContract({
-        address: CONFIG.contractAddress,
-        abi: LEADERBOARD_ABI,
-        functionName: 'submitScore',
-        args: [BigInt(score), BigInt(highestTile)],
-        account: address as Address,
-        chain: polkadotHubTestnet,
-      });
-
-      onStatus?.('broadcasting');
-
-      // Wait for transaction receipt
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-      if (receipt.status === 'success') {
-        onStatus?.('finalized');
-      } else {
-        throw new Error('Transaction failed');
-      }
-
-      return hash;
-    } catch (error) {
-      console.error('Failed to submit score via EVM:', error);
-      throw error;
+    if (result && result.ok === false) {
+      onStatus?.('failed');
+      throw new Error(`Transaction failed: ${JSON.stringify(result.dispatchError ?? 'unknown')}`);
     }
+
+    onStatus?.('finalized');
+    return result?.txHash ?? '';
   }
 
-  // Get top scores from the leaderboard
   async getTopScores(count: number = 20): Promise<LeaderboardEntry[]> {
     try {
-      // Use viem public client for reading (works for both EVM and Substrate wallets)
-      const result = await publicClient.readContract({
-        address: CONFIG.contractAddress,
-        abi: LEADERBOARD_ABI,
-        functionName: 'getTopScores',
-        args: [BigInt(count)],
-      }) as Array<{
-        player: Address;
-        score: bigint;
-        highestTile: bigint;
-        timestamp: bigint;
-      }>;
+      const contract = (await getLeaderboardContract()) as unknown as AnyContract;
+      const res = await contract.getTopScores.query(BigInt(count));
+      if (!res.success) return [];
 
-      // Map to our interface
-      return result.map((entry, index) => ({
+      const rows = (res.value as Array<Record<string, unknown>>) ?? [];
+      return rows.map((entry, index) => ({
         rank: index + 1,
-        address: entry.player,
-        score: Number(entry.score),
-        highestTile: Number(entry.highestTile),
-        timestamp: Number(entry.timestamp),
+        address: String(entry.player ?? entry[0] ?? ''),
+        score: num(entry.score ?? entry[1]),
+        highestTile: num(entry.highestTile ?? entry[2]),
+        timestamp: num(entry.timestamp ?? entry[3]),
       }));
     } catch (error) {
       console.error('Failed to get top scores:', error);
@@ -167,40 +76,28 @@ export class LeaderboardService {
     }
   }
 
-  // Get personal best for a player
   async getPersonalBest(playerAddress?: string): Promise<number | null> {
-    const address = playerAddress || walletService.getAddress();
+    const address = playerAddress || walletService.getH160();
     if (!address) return null;
-
     try {
-      const result = await publicClient.readContract({
-        address: CONFIG.contractAddress,
-        abi: LEADERBOARD_ABI,
-        functionName: 'getPersonalBest',
-        args: [address as Address],
-      }) as bigint;
-
-      return Number(result);
+      const contract = (await getLeaderboardContract()) as unknown as AnyContract;
+      const res = await contract.getPersonalBest.query(address);
+      if (!res.success) return null;
+      return num(res.value);
     } catch (error) {
       console.error('Failed to get personal best:', error);
       return null;
     }
   }
 
-  // Get a player's rank
   async getPlayerRank(playerAddress?: string): Promise<number | null> {
-    const address = playerAddress || walletService.getAddress();
+    const address = playerAddress || walletService.getH160();
     if (!address) return null;
-
     try {
-      const result = await publicClient.readContract({
-        address: CONFIG.contractAddress,
-        abi: LEADERBOARD_ABI,
-        functionName: 'getPlayerRank',
-        args: [address as Address],
-      }) as bigint;
-
-      const rank = Number(result);
+      const contract = (await getLeaderboardContract()) as unknown as AnyContract;
+      const res = await contract.getPlayerRank.query(address);
+      if (!res.success) return null;
+      const rank = num(res.value);
       return rank === 0 ? null : rank;
     } catch (error) {
       console.error('Failed to get player rank:', error);
@@ -209,5 +106,4 @@ export class LeaderboardService {
   }
 }
 
-// Singleton instance
 export const leaderboardService = new LeaderboardService();

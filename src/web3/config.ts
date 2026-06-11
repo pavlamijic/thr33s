@@ -1,47 +1,57 @@
-import type { Address } from 'viem';
+// Chain + app configuration for thr33s.
+//
+// thr33s runs as a Proof-of-Personhood-only app inside the Polkadot host
+// (dot.li / paseo.li web, polkadot-desktop, Polkadot app). All chain access
+// goes over the Substrate WS via PAPI v2 — in a host it's routed through the
+// host sandbox by `getHostProvider(genesisHash)`; standalone it connects
+// directly to `rpcEndpoint` (read-only; signing requires a host).
+//
+// Network: paseo-next-v2 (the testnet the live gateways resolve). Params
+// verified against paritytech/festival packages/shared/host/networks.ts and
+// bulletin-deploy assets/environments.json.
 
 export const CONFIG = {
-  // Paseo Asset Hub testnet (Polkadot Hub TestNet)
+  // ── paseo-next-v2 Asset Hub (pallet-revive contracts live here) ──
+  chainName: 'Paseo Next v2 Asset Hub',
+
+  // Substrate WebSocket RPC, used by PAPI for the standalone (non-host) path.
+  rpcEndpoint: 'wss://paseo-asset-hub-next-rpc.polkadot.io',
+
+  // Asset Hub genesis hash — handed to `getHostProvider` so the host routes
+  // our RPC to the right chain. This chain has been re-genesised before
+  // (last refreshed 2026-06-01); if the host rejects it as unsupported,
+  // re-sync this hash from festival networks.ts / `bun run sync-network`.
+  assetHubGenesisHash:
+    '0xbf0488dbe9daa1de1c08c5f743e26fdc2a4ecd74cf87dd1b4b1eeb99ae4ef19f' as `0x${string}`,
+
+  // EVM chainId exposed by pallet-revive's eth-rpc (shared across Paseo
+  // variants). Kept for reference / explorer links.
   chainId: 420420417,
-  chainName: 'Polkadot Hub TestNet',
 
-  // RPC endpoints
-  // Substrate WebSocket RPC for polkadot-api
-  rpcEndpoint: 'wss://sys.passet.ibp.network',
-
-  // EVM HTTP RPC (for reference)
-  evmRpcEndpoint: 'https://eth-rpc-testnet.polkadot.io/',
-
-  // Paseo Asset Hub genesis hash — required by `createPapiProvider` so
-  // the dot.li host can route our RPC through its sandbox-safe bridge
-  // instead of opening a direct WebSocket (which the sandbox blocks).
-  // Source: p2p-market's assethub-provider.ts.
-  paseoAssetHubGenesisHash: '0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2' as `0x${string}`,
-
-  // Paseo Next People chain (Id 5140) — the Polkadot App TestFlight testnet
-  // where attested usernames live. The "Stable" network
-  // (pop3-testnet.parity-lab.parity.io) is being decommissioned; Paseo Next
-  // replaces it.
-  popStableRpcEndpoint: 'wss://paseo-people-next-rpc.polkadot.io',
-
-  // Currency
+  // Native token. Substrate layer is 10 decimals on paseo-next-v2.
   currencySymbol: 'PAS',
-  currencyDecimals: 18,
+  currencyDecimals: 10,
 
-  // Block explorer
-  blockExplorer: 'https://blockscout-testnet.polkadot.io/',
+  blockExplorer: 'https://assethub-paseo.subscan.io/',
 
-  // Contract address (deployed on Polkadot Hub TestNet)
-  contractAddress: '0xC295A8b2D1E3fb8e70FaEc85eD6140060f36f2F5' as Address,
+  // ── Leaderboard contract ──
+  // Thr33sLeaderboard on paseo-next-v2 Asset Hub. Deployed via
+  // `npm run deploy:contract` (scripts/deploy.mjs). REPLACE after deploy.
+  contractAddress: '0x0000000000000000000000000000000000000000' as `0x${string}`,
 
-  // App name for wallet connection
+  // Origin used for read-only contract dry-runs when no user is connected
+  // (e.g. viewing the leaderboard before sign-in). Any valid AccountId works
+  // for a view call — this is the well-known //Alice address.
+  readOrigin: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+
+  // App identity. The product account is derived per DotNS name; thr33s is
+  // published at playthrees33.dot. `host-wallet.ts` derives this from the URL
+  // at runtime (so previews work) and falls back to this value.
+  appDotNs: 'playthrees33.dot',
   appName: 'Thr33s',
-
-  // Supported wallet extension names
-  supportedWallets: ['polkadot-js', 'subwallet-js', 'talisman'],
 };
 
-// Update contract address after deployment
-export function setContractAddress(address: Address): void {
+// Update contract address after deployment (used by scripts / tests).
+export function setContractAddress(address: `0x${string}`): void {
   CONFIG.contractAddress = address;
 }

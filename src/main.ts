@@ -8,16 +8,14 @@ import { TutorialController } from './ui/tutorial';
 import {
   showGameOverModal,
   showLeaderboardModal,
-  showWalletProviderModal,
   showLoadingModal,
   showErrorModal,
   showSuccessModal,
   showInstructionsModal,
   type LeaderboardEntry,
 } from './ui/modals';
-import { getDisplayName, getPopName, truncateAddress } from './web3/pop-stable';
 import { walletService } from './web3/wallet';
-import { isInHost } from './web3/host-wallet';
+import { isInHost, truncateAddress } from './web3/host-wallet';
 import { leaderboardService } from './web3/leaderboard';
 import {
   initAudio,
@@ -210,62 +208,40 @@ function handleConnectWallet(): void {
   handleConnectWalletForSubmission();
 }
 
-// Handle wallet connection for score submission (returns success status)
+// Handle sign-in for score submission (returns success status). thr33s is
+// Proof-of-Personhood-only: the only identity is the host (Polkadot app)
+// account. Outside a host there is nothing to connect to.
 async function handleConnectWalletForSubmission(): Promise<boolean> {
   console.log('[connect] clicked; isInHost=', isInHost(), 'connected=', walletService.isConnected());
 
-  // Inside a Triangle host (dot.li / polkadot-desktop), browser wallet
-  // extensions are blocked by the sandbox. Wait passively for the user to
-  // sign in via the host's topbar — same pattern as ignite / p2p-market
-  // (the host SDK doesn't surface a reliable in-product sign-in prompt).
-  if (isInHost()) {
-    console.log('[connect] trying connectFromHost');
-    const alreadyConnected = await walletService.connectFromHost();
-    console.log('[connect] connectFromHost →', alreadyConnected);
-    if (alreadyConnected) return true;
-
-    console.log('[connect] showing sign-in-via-topbar modal');
-    const closeLoading = showLoadingModal(
-      'Sign in with the Polkadot app using the topbar. This will continue automatically once you are signed in.',
-    );
-    const connected = await walletService.waitForConnection(120_000);
-    closeLoading();
-    console.log('[connect] waitForConnection →', connected);
-
-    if (connected) return true;
+  if (!isInHost()) {
     showErrorModal(
-      'No sign-in detected. Open the Polkadot-app sign-in from the topbar and click again.',
+      'Open Thr33s in the Polkadot app (or at playthrees33.paseo.li) and sign in to submit your score.',
     );
     return false;
   }
 
-  const providers = walletService.getInstalledProviders();
+  // connectFromHost resolves immediately if a session already exists;
+  // otherwise it leaves a subscription so a later topbar sign-in continues
+  // automatically.
+  console.log('[connect] trying connectFromHost');
+  const alreadyConnected = await walletService.connectFromHost();
+  console.log('[connect] connectFromHost →', alreadyConnected);
+  if (alreadyConnected) return true;
 
-  if (providers.length === 0) {
-    showErrorModal(
-      'No wallet extensions detected. Please install Talisman, SubWallet, or Polkadot.js extension.'
-    );
-    return false;
-  }
+  console.log('[connect] showing sign-in-via-topbar modal');
+  const closeLoading = showLoadingModal(
+    'Sign in with the Polkadot app using the topbar. This will continue automatically once you are signed in.',
+  );
+  const connected = await walletService.waitForConnection(120_000);
+  closeLoading();
+  console.log('[connect] waitForConnection →', connected);
 
-  return new Promise((resolve) => {
-    showWalletProviderModal(providers, async (providerId) => {
-      const closeLoading = showLoadingModal('Connecting wallet...');
-
-      try {
-        await walletService.connect(providerId);
-        closeLoading();
-        resolve(true);
-      } catch (error) {
-        closeLoading();
-        console.error('Failed to connect wallet:', error);
-        showErrorModal(
-          `Failed to connect wallet: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-        resolve(false);
-      }
-    });
-  });
+  if (connected) return true;
+  showErrorModal(
+    'No sign-in detected. Open the Polkadot-app sign-in from the topbar and try again.',
+  );
+  return false;
 }
 
 // Handle wallet disconnect
@@ -278,54 +254,52 @@ function handleWalletEvent(_event: { type: string; address?: string }): void {
   updateWalletButton();
 }
 
-// Tracks the most recent wallet address the button was rendered for, so that
-// an in-flight PoP-name resolution that finishes after a disconnect or
-// account switch can't clobber the updated UI.
-let walletButtonAddress: string | null = null;
-
 function updateWalletButton(): void {
   const walletBtn = document.getElementById('wallet-btn')!;
 
   if (walletService.isConnected()) {
+    // The host surfaces the user's PoP username (e.g. "daemiadot") on the
+    // account; fall back to the truncated address if it didn't.
+    const name = walletService.getAccountName();
     const address = walletService.getAddress();
-    walletButtonAddress = address;
-    // Prefer the host-surfaced PoP alias (e.g. "daemia.99") when we have
-    // one — it's already attested and doesn't need a chain round-trip.
-    const hostAlias = walletService.getHostAlias();
-    const fallback =
-      hostAlias ?? (address ? truncateAddress(address) : walletService.getDisplayAddress());
+    const label = name ?? (address ? truncateAddress(address) : '');
     walletBtn.innerHTML = `
-      <span class="wallet-address">${fallback}</span>
+      <span class="wallet-dot" aria-hidden="true"></span>
+      <span class="wallet-address">${label}</span>
     `;
+    walletBtn.title = address ?? '';
+    walletBtn.classList.remove('btn-primary');
     walletBtn.classList.add('wallet-connected');
     walletBtn.onclick = handleDisconnectWallet;
-
-    // Progressive enhancement: if we don't already have a host alias,
-    // try the pop_stable lookup. The truncated address is the fallback.
-    if (!hostAlias && address) {
-      const addressAtRequest = address;
-      getPopName(address)
-        .then((name) => {
-          if (!name) return;
-          if (walletButtonAddress !== addressAtRequest) return;
-          const label = walletBtn.querySelector('.wallet-address');
-          if (label) label.textContent = name;
-        })
-        .catch(() => {
-          // Keep the truncated fallback.
-        });
-    }
   } else {
-    walletButtonAddress = null;
-    walletBtn.textContent = isInHost() ? 'Sign in with Polkadot App' : 'Connect Wallet';
+    walletBtn.textContent = 'Sign in with Polkadot App';
+    walletBtn.title = '';
     walletBtn.classList.remove('wallet-connected');
+    walletBtn.classList.add('btn-primary');
     walletBtn.onclick = handleConnectWallet;
   }
+}
+
+// Resolve a leaderboard row (keyed by stored H160) to a display name. Scores
+// store the product account's H160, which doesn't reverse-resolve to a PoP
+// username on-chain, so we can only label the signed-in user's own row (via
+// the host-surfaced name); everyone else shows a truncated address.
+function makeDisplayNameResolver(): (address: string) => Promise<string> {
+  const myH160 = walletService.getH160()?.toLowerCase() ?? null;
+  const myName = walletService.getAccountName();
+  return (address: string) => {
+    if (myH160 && myName && address.toLowerCase() === myH160) {
+      return Promise.resolve(myName);
+    }
+    return Promise.resolve(truncateAddress(address));
+  };
 }
 
 // Show leaderboard
 async function handleShowLeaderboard(): Promise<void> {
   const closeLoading = showLoadingModal('Loading leaderboard...');
+  const resolveDisplayName = makeDisplayNameResolver();
+  const myH160 = walletService.getH160();
 
   try {
     const [scores, personalBest] = await Promise.all([
@@ -343,13 +317,13 @@ async function handleShowLeaderboard(): Promise<void> {
       timestamp: s.timestamp,
     }));
 
-    showLeaderboardModal(entries, walletService.getAddress(), personalBest, getDisplayName);
+    showLeaderboardModal(entries, myH160, personalBest, resolveDisplayName);
   } catch (error) {
     closeLoading();
     console.error('Failed to load leaderboard:', error);
 
     // Show empty leaderboard on error
-    showLeaderboardModal([], walletService.getAddress(), null, getDisplayName);
+    showLeaderboardModal([], myH160, null, resolveDisplayName);
   }
 }
 

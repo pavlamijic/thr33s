@@ -424,51 +424,47 @@ html, body {
   font-size: 12px;
 }
 
-/* Wallet provider modal */
-.wallet-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.wallet-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border: 2px solid var(--board-color);
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.wallet-option:hover {
-  border-color: var(--text-color);
-}
-
-.wallet-option img {
-  width: 32px;
-  height: 32px;
-}
-
-.wallet-option span {
-  font-weight: 600;
-}
-
-/* Connected wallet display */
+/* Connected wallet button — shows the signed-in PoP username (e.g. daemiadot).
+   Polkadot-pink fill with white text for clear, accessible contrast
+   (white on #e6007a ≈ 4.7:1, AA). Replaces the old pale-grey-on-white pill. */
 .wallet-connected {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background-color: rgba(0, 0, 0, 0.05);
-  border-radius: var(--border-radius);
+  padding: 8px 14px;
+  background-color: var(--pink, #e6007a);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  font-weight: 700;
+  max-width: 220px;
+}
+
+.wallet-connected:hover {
+  background-color: #c50069;
+  opacity: 1;
+}
+
+.wallet-connected:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.wallet-connected .wallet-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  flex: 0 0 auto;
 }
 
 .wallet-address {
-  font-family: monospace;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Loading state */

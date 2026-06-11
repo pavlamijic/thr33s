@@ -6,17 +6,25 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:contract": "node scripts/deploy.mjs"
   },
   "devDependencies": {
+    "@parity/resolc": "^1.2.0",
+    "@polkadot-labs/hdkd": "^0.0.26",
+    "@polkadot-labs/hdkd-helpers": "^0.0.27",
     "esbuild": "^0.28.0",
     "typescript": "~5.9.3",
     "vite": "^7.2.4"
   },
   "dependencies": {
-    "@novasamatech/product-sdk": "^0.6.18",
-    "@talismn/connect-wallets": "^1.2.0",
-    "polkadot-api": "^1.9.5",
-    "viem": "^2.0.0"
+    "@parity/product-sdk-contracts": "^0.7.4",
+    "@parity/product-sdk-host": "^0.9.0",
+    "@parity/product-sdk-signer": "^0.6.4",
+    "polkadot-api": "^2.1.5"
+  },
+  "//overrides": "@polkadot-api/json-rpc-provider 0.0.1 hoists with empty exports and breaks PAPI v2 (missing `isResponse`); pin 0.2.0. Same fix as paritytech/festival.",
+  "overrides": {
+    "@polkadot-api/json-rpc-provider": "0.2.0"
   }
 }

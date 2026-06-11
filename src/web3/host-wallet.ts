@@ -1,226 +1,156 @@
-// Polkadot Desktop / trUI / dot.li host integration.
+// Polkadot host (dot.li / paseo.li web, polkadot-desktop, Polkadot app)
+// integration via the maintained @parity product-sdk.
 //
-// When thr33s runs inside a Polkadot "Triangle" host — polkadot-desktop as
-// `playthrees33.dot`, or dot.li as `playthrees33.dot.li` — the host exposes
-// the user's logged-in account via `@novasamatech/product-sdk`. We read it
-// through the SDK's AccountsProvider (NOT through the injectedWeb3 / pjs
-// bridge — that path only works inside the Electron webview, not inside
-// dot.li's cross-origin iframe).
+// thr33s is Proof-of-Personhood-only: the single signing identity is the
+// product account derived for this app's DotNS name. `SignerManager.connect()`
+// (with the `productAccount` option) does three things we previously hand-rolled
+// and got wrong:
+//   1. the legacy-accounts handshake that wires up the mobile host's signing
+//      transport (without it, prompts never reach the paired device and the
+//      submit spinner hangs forever);
+//   2. the host `ChainSubmit` permission request (without it the host silently
+//      rejects every signing request);
+//   3. populating the account `name` from the user's PoP username
+//      (getUserId().primaryUsername, e.g. "daemiadot").
 //
-// Detection mirrors ignite's `isInTriangleHost()` and the SDK's own internal
-// transport selection: `window.__HOST_WEBVIEW_MARK__` (desktop/mobile), or
-// any iframe (dot.li). `injectSpektrExtension()` returning true is the
-// definitive confirmation — it's also what sets up the SDK's sandbox
-// transport for everything else to work.
-//
-// Pattern copied from:
-//   refs/ignite/src/contexts/WalletContext.tsx
-//   refs/ignite/src/lib/triangle/hostDetection.ts
+// Reference: paritytech/dotli-starter src/main.js + @parity/product-sdk-signer.
 
-import {
-  createAccountsProvider,
-  hostApi,
-  injectSpektrExtension,
-  sandboxProvider,
-  type ProductAccount,
-} from '@novasamatech/product-sdk';
-import { AccountId, type PolkadotSigner } from 'polkadot-api';
+import { getHostProvider, isInsideContainerSync } from '@parity/product-sdk-host';
+import { SignerManager, type SignerAccount } from '@parity/product-sdk-signer';
+import { CONFIG } from './config';
 
-declare global {
-  interface Window {
-    __HOST_WEBVIEW_MARK__?: boolean;
-  }
-}
-
-export type HostEnvironment = 'desktop-webview' | 'web-iframe' | 'standalone';
+export { getHostProvider };
 
 export interface HostAccount {
+  /** SS58 address (generic prefix 42). */
   address: string;
-  name: string;
+  /** H160 EVM address — the pallet-revive / leaderboard contract identity. */
+  h160Address: string;
+  /** PoP username (e.g. "daemiadot") when the host surfaced one, else null. */
+  name: string | null;
   publicKey: Uint8Array;
-  signer: PolkadotSigner;
-  // Host-surfaced PoP-attested alias ("daemia.99" etc.) if the host's
-  // `getProductAccountAlias` call resolved. Null when the host didn't
-  // provide one — caller falls back to pop_stable lookup or truncated
-  // address.
-  alias: string | null;
 }
 
-export function detectHostEnvironment(): HostEnvironment {
-  if (typeof window === 'undefined') return 'standalone';
-  if (window.__HOST_WEBVIEW_MARK__) return 'desktop-webview';
-  try {
-    if (window !== window.top) return 'web-iframe';
-  } catch {
-    // Cross-origin iframe — the comparison throws; still a host.
-    return 'web-iframe';
+// The dotli host binds each product to a DotNS identifier; signing fails with
+// PermissionDenied if the signer's identifier doesn't match the URL the host
+// loaded. Derive it from the URL so the same build works under localhost,
+// `<name>.dot`, `<name>.dot.li`, `<name>.paseo.li`, and `<sub>.<name>` previews.
+// Ported from dotli-starter's deriveSelfDotNs().
+export function deriveSelfDotNs(): string {
+  if (typeof window === 'undefined') return CONFIG.appDotNs;
+  const hostname = window.location.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.endsWith('.localhost')
+  ) {
+    return CONFIG.appDotNs;
   }
-  return 'standalone';
+  if (hostname.endsWith('.dot')) {
+    const segments = hostname.split('.');
+    return segments.length > 2 ? segments.slice(-2).join('.') : hostname;
+  }
+  // Gateway form: <label...>.<gateway-tld> e.g. playthrees33.paseo.li → playthrees33.dot
+  const segments = hostname.split('.');
+  if (segments.length >= 3) {
+    let label = segments.slice(0, -2);
+    if (label[label.length - 1] === 'app') label = label.slice(0, -1);
+    if (label.length > 0) return `${label.join('.')}.dot`;
+  }
+  return CONFIG.appDotNs;
 }
 
-// Canonical detection used by the product-sdk itself. The hand-rolled
-// checks above can miss edge cases (e.g. dot.li's `document.write()` path
-// that re-anchors the window), so prefer this when available.
+export const SELF_DOTNS = deriveSelfDotNs();
+
+// Single shared SignerManager. `connect()` establishes the host session
+// (legacy-accounts handshake) and requests the `ChainSubmit` permission by
+// default; we then resolve our app-scoped product account via
+// `getProductAccount(SELF_DOTNS)`, whose `name` is the user's PoP username.
+export const signerManager = new SignerManager({
+  ss58Prefix: 42,
+  dappName: 'thr33s',
+});
+
+// Sync host detection for UI rendering (labels, gating). The SDK's async
+// `isInsideContainer()` is authoritative; this mirrors its heuristic
+// (desktop sets __HOST_WEBVIEW_MARK__, web loads us in an iframe).
 export function isInHost(): boolean {
   try {
-    if (sandboxProvider.isCorrectEnvironment()) return true;
+    return isInsideContainerSync();
   } catch {
-    // fall through to heuristic
+    if (typeof window === 'undefined') return false;
+    if ((window as { __HOST_WEBVIEW_MARK__?: boolean }).__HOST_WEBVIEW_MARK__) return true;
+    try {
+      return window !== window.top;
+    } catch {
+      return true; // cross-origin iframe access throws → we're in a host
+    }
   }
-  return detectHostEnvironment() !== 'standalone';
 }
 
-// Shared by all callers so the SDK only spins up one sandbox transport.
-const accountsProvider = createAccountsProvider();
-const accountIdCodec = AccountId();
-
-function toHostAccount(raw: { publicKey: Uint8Array; name: string | undefined }): HostAccount {
-  // The SDK's signer only uses `publicKey` at runtime, but TypeScript
-  // requires the full ProductAccount shape — fake the rest.
-  const productAccount: ProductAccount = {
-    publicKey: raw.publicKey,
-    dotNsIdentifier: '',
-    derivationIndex: 0,
-  };
-  const rawName = raw.name?.trim() || null;
+function toHostAccount(account: SignerAccount): HostAccount {
   return {
-    address: accountIdCodec.dec(raw.publicKey),
-    name: rawName || 'Account',
-    publicKey: raw.publicKey,
-    // `getNonProductAccountSigner` matches dotli-starter's pattern — works
-    // with both PoP and pre-PoP accounts returned from `getNonProductAccounts`.
-    signer: accountsProvider.getNonProductAccountSigner(productAccount),
-    // The host populates `name` with the user's PoP handle (e.g. "daemia.99")
-    // when available, so reuse it as the alias displayed on the wallet button.
-    alias: rawName,
+    address: account.address,
+    h160Address: account.h160Address,
+    name: account.name,
+    publicKey: account.publicKey,
   };
 }
 
-// One-shot connect. Returns the first logged-in host account, or null when:
-//   - not in a host,
-//   - `injectSpektrExtension()` reports false (the SDK couldn't handshake),
-//   - the host has no active session (user hasn't signed in yet).
-//
-// For the "user signs in after the page loaded" case the caller should
-// `subscribeHostConnection` and re-call this when the status flips to
-// `connected`.
-// Placeholder — product-sdk 0.6.x has no `requestLogin` API. Callers should
-// fall back to the passive-wait pattern (show 'sign in via topbar' modal,
-// subscribe to connection status). Kept as a stub for when the SDK lands
-// a stable trigger-sign-in method.
-export async function requestHostLogin(_reason?: string): Promise<boolean> {
-  return false;
-}
-
-// dot.li auto-denies every signing request until the dApp explicitly asks
-// for a `TransactionSubmit` permission (SigningErr::PermissionDenied is the
-// observable symptom). Granted permissions are persisted, so calling this
-// once per session is enough. Return true on success.
-export async function requestTransactionSubmitPermission(): Promise<boolean> {
-  try {
-    console.log('[host] requesting TransactionSubmit permission');
-    const result = await hostApi.permission({
-      tag: 'v1',
-      value: { tag: 'TransactionSubmit', value: undefined },
-    } as Parameters<typeof hostApi.permission>[0]);
-    if (result.isErr()) {
-      console.warn('[host] TransactionSubmit permission request errored:', result.error);
-      return false;
-    }
-    const granted = (result.value as any).value === true;
-    console.log('[host] TransactionSubmit permission →', granted);
-    return granted;
-  } catch (error) {
-    console.warn('[host] TransactionSubmit permission threw:', error);
-    return false;
+// Resolve this app's product account (must be called after a successful
+// connect()). `name` is the user's PoP username, populated best-effort by the
+// SDK from getUserId().primaryUsername.
+async function resolveProductAccount(): Promise<HostAccount | null> {
+  const res = await signerManager.getProductAccount(SELF_DOTNS, 0);
+  if (!res.ok) {
+    console.warn('[host] getProductAccount failed:', res.error);
+    return null;
   }
+  return toHostAccount(res.value);
 }
 
-// Account-fetch calls can silently hang when the host can't fulfil them
-// (e.g. user in the wrong auth state for the API being called). Race with
-// a short timeout so the UI can move on and try the next strategy. dot.li's
-// first call can be slow (sandbox handshake), so be generous.
-const GET_ACCOUNTS_TIMEOUT_MS = 15_000;
-
-const timeoutSentinel = Symbol('timeout');
-
-function raceWithTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | typeof timeoutSentinel> {
-  return Promise.race([
-    Promise.resolve(promise),
-    new Promise<typeof timeoutSentinel>((resolve) => setTimeout(() => resolve(timeoutSentinel), ms)),
-  ]);
-}
-
-// Canonical dot.li pattern (copied from `refs/dotli-starter/src/main.js`):
-// call `getNonProductAccounts()` to get the user's real account, including
-// the PoP handle in the `name` field (e.g. "daemia.99"). t3rminal's
-// `getProductAccount` path gave us a per-dApp derived sub-account with no
-// name — wrong template for this host.
-export async function connectToHost(): Promise<HostAccount | null> {
+// Connect to the host and resolve the product account. Returns null when not
+// in a host, or when the host has no active session yet (user not signed in).
+export async function connectHost(): Promise<HostAccount | null> {
   try {
-    console.log('[host] connectToHost: injecting spektr extension');
-    const injected = await injectSpektrExtension();
-    console.log('[host] connectToHost: injectSpektrExtension →', injected);
-    if (!injected) return null;
-
-    console.log('[host] connectToHost: fetching non-product accounts');
-    const result = await raceWithTimeout(
-      accountsProvider.getNonProductAccounts(),
-      GET_ACCOUNTS_TIMEOUT_MS,
-    );
-
-    if (result === timeoutSentinel) {
-      console.log('[host] connectToHost: getNonProductAccounts timed out');
+    const result = await signerManager.connect();
+    if (!result.ok) {
+      console.warn('[host] SignerManager.connect failed:', result.error);
       return null;
     }
-    if (!result.isOk()) {
-      console.warn('[host] getNonProductAccounts failed:', result.error);
-      return null;
-    }
-    const raw = result.value;
-    console.log(
-      '[host] connectToHost: got',
-      raw.length,
-      'account(s); first name=',
-      JSON.stringify(raw[0]?.name),
-    );
-    if (raw.length === 0) return null;
-
-    return toHostAccount(raw[0]);
+    const account = await resolveProductAccount();
+    if (account) console.log('[host] connected:', account.name ?? account.address);
+    return account;
   } catch (error) {
-    console.warn('[host] connectToHost threw:', error);
+    console.warn('[host] connectHost threw:', error);
     return null;
   }
 }
 
-// Subscribes to the host's account-connection status so we can pick up a
-// sign-in that happens after our initial attempt. `onConnect` fires with the
-// first account whenever the host transitions to connected and has accounts;
-// `onDisconnect` fires when the host logs out.
+// Subscribe to host connection-status changes so a sign-in that happens after
+// our initial attempt (e.g. user signs in via the topbar) is picked up. Only
+// acts on transitions to avoid re-firing on every state mutation while
+// connected.
 export function subscribeHostConnection(
   onConnect: (account: HostAccount) => void,
   onDisconnect: () => void,
 ): () => void {
-  const subscription = accountsProvider.subscribeAccountConnectionStatus(async (status) => {
-    if (status === 'disconnected') {
-      onDisconnect();
-      return;
-    }
-    if (status === 'connected') {
-      try {
-        const account = await connectToHost();
+  let lastStatus: string | null = null;
+  return signerManager.subscribe((state) => {
+    if (state.status === lastStatus) return;
+    lastStatus = state.status;
+    if (state.status === 'connected') {
+      void resolveProductAccount().then((account) => {
         if (account) onConnect(account);
-      } catch (error) {
-        console.warn('[host] re-fetch on reconnect failed:', error);
-      }
+      });
+    } else if (state.status === 'disconnected') {
+      onDisconnect();
     }
   });
+}
 
-  return () => {
-    try {
-      subscription.unsubscribe?.();
-    } catch {
-      // best-effort cleanup
-    }
-  };
+export function truncateAddress(address: string): string {
+  if (!address) return '';
+  if (address.length <= 13) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }

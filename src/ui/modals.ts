@@ -6,12 +6,6 @@ export interface LeaderboardEntry {
   timestamp: number;
 }
 
-export interface WalletProvider {
-  id: string;
-  name: string;
-  icon?: string;
-}
-
 type ModalCloseCallback = () => void;
 
 // Truncate address for display
@@ -217,73 +211,6 @@ export function showLeaderboardModal(
   return close;
 }
 
-// Show wallet provider selection modal
-export function showWalletProviderModal(
-  providers: WalletProvider[],
-  onSelectProvider: (providerId: string) => void
-): ModalCloseCallback {
-  const modalsContainer = document.getElementById('modals')!;
-
-  const overlay = createModalOverlay();
-  const modal = document.createElement('div');
-  modal.className = 'modal';
-
-  const providersHtml = providers.length === 0
-    ? '<p>No wallet extensions detected. Please install Talisman, SubWallet, or Polkadot.js extension.</p>'
-    : `
-      <div class="wallet-options">
-        ${providers
-          .map(
-            (p) => `
-            <div class="wallet-option" data-provider-id="${p.id}">
-              ${p.icon ? `<img src="${p.icon}" alt="${p.name}">` : ''}
-              <span>${p.name}</span>
-            </div>
-          `
-          )
-          .join('')}
-      </div>
-    `;
-
-  modal.innerHTML = `
-    <h2>Connect Wallet</h2>
-    ${providersHtml}
-    <div class="modal-buttons" style="margin-top: 16px;">
-      <button class="btn btn-secondary" id="cancel-wallet-btn">Cancel</button>
-    </div>
-  `;
-
-  overlay.appendChild(modal);
-  modalsContainer.appendChild(overlay);
-
-  // Provider selection handlers
-  const options = modal.querySelectorAll('.wallet-option');
-  options.forEach((option) => {
-    option.addEventListener('click', () => {
-      const providerId = (option as HTMLElement).dataset.providerId;
-      if (providerId) {
-        close();
-        onSelectProvider(providerId);
-      }
-    });
-  });
-
-  // Close handlers
-  const cancelBtn = modal.querySelector('#cancel-wallet-btn');
-  cancelBtn?.addEventListener('click', close);
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      close();
-    }
-  });
-
-  function close() {
-    overlay.remove();
-  }
-
-  return close;
-}
 
 // Show loading modal
 export function showLoadingModal(message: string): ModalCloseCallback {

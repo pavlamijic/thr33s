@@ -2,6 +2,7 @@
 // thin wrapper over the host SignerManager — no browser-extension or MetaMask
 // paths. The single account is the host product account (see host-wallet.ts).
 
+import type { PolkadotSigner } from 'polkadot-api';
 import {
   connectHost,
   subscribeHostConnection,
@@ -110,6 +111,12 @@ export class WalletService {
   /** Alias kept for callers; same as the PoP username. */
   getHostAlias(): string | null {
     return this.account?.name ?? null;
+  }
+
+  /** Host signer for the connected product account. */
+  getSigner(): PolkadotSigner {
+    if (!this.account) throw new Error('Not signed in');
+    return this.account.signer;
   }
 
   getDisplayAddress(): string {

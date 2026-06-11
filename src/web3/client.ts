@@ -19,7 +19,7 @@ import {
 } from '@parity/product-sdk-contracts';
 import { CONFIG } from './config';
 import { LEADERBOARD_ABI } from './abi';
-import { getHostProvider, signerManager, isInHost } from './host-wallet';
+import { getHostProvider, isInHost } from './host-wallet';
 
 let clientPromise: Promise<PolkadotClient> | null = null;
 let contract: Contract<ContractDef> | null = null;
@@ -51,8 +51,9 @@ export async function getLeaderboardContract(): Promise<Contract<ContractDef>> {
   // ReviveTypedApi surface the runtime needs, without generating descriptors.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const runtime = createContractRuntime(client.getUnsafeApi() as any);
+  // No signerManager: signer + origin are passed per-call from leaderboard.ts
+  // (the connected product account). defaultOrigin covers anonymous reads.
   contract = createContract(runtime, CONFIG.contractAddress, LEADERBOARD_ABI as never, {
-    signerManager,
     defaultOrigin: CONFIG.readOrigin,
   });
   return contract;

@@ -23,6 +23,7 @@ export interface LeaderboardEntry {
 
 // pallet-revive auto-maps accounts on first tx on paseo-next-v2
 // (autoAccountMapping: true), so no explicit map_account is needed here.
+type TxOpts = { signer: unknown; origin?: string };
 type AnyContract = Record<string, {
   tx: (...args: unknown[]) => Promise<{ ok?: boolean; txHash?: string; dispatchError?: unknown }>;
   query: (...args: unknown[]) => Promise<{ success: boolean; value: unknown }>;
@@ -43,9 +44,13 @@ export class LeaderboardService {
     }
 
     const contract = (await getLeaderboardContract()) as unknown as AnyContract;
+    const opts: TxOpts = {
+      signer: walletService.getSigner(),
+      origin: walletService.getAddress() ?? undefined,
+    };
 
     onStatus?.('signing');
-    const result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile));
+    const result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile), opts);
 
     if (result && result.ok === false) {
       onStatus?.('failed');

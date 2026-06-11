@@ -1,56 +1,58 @@
 // Polkadot host (dot.li / paseo.li web, polkadot-desktop, Polkadot app)
-// integration via the maintained @parity product-sdk.
+// integration via @parity/product-sdk-host's low-level accounts provider —
+// the dotli-starter pattern (src/main.js), NOT SignerManager.
 //
-// thr33s is Proof-of-Personhood-only: the single signing identity is the
-// product account derived for this app's DotNS name. `SignerManager.connect()`
-// (with the `productAccount` option) does three things we previously hand-rolled
-// and got wrong:
-//   1. the legacy-accounts handshake that wires up the mobile host's signing
-//      transport (without it, prompts never reach the paired device and the
-//      submit spinner hangs forever);
-//   2. the host `ChainSubmit` permission request (without it the host silently
-//      rejects every signing request);
-//   3. populating the account `name` from the user's PoP username
-//      (getUserId().primaryUsername, e.g. "daemiadot").
-//
-// Reference: paritytech/dotli-starter src/main.js + @parity/product-sdk-signer.
+// Why not SignerManager: its host provider throws NoAccountsError when the host
+// returns zero *legacy* accounts. A Proof-of-Personhood-only user (e.g.
+// "daemiadot") has no legacy wallet accounts — only a derivable product
+// account — so SignerManager.connect() fails for exactly our users. The
+// accounts-provider flow instead does a tolerant getLegacyAccounts() handshake
+// (to wire up mobile-host signing), grants ChainSubmit, then derives the
+// product account directly with getProductAccount().
 
-import { getHostProvider, isInsideContainerSync } from '@parity/product-sdk-host';
-import { SignerManager, type SignerAccount } from '@parity/product-sdk-signer';
+import {
+  getAccountsProvider,
+  getTruApi,
+  getHostProvider,
+  isInsideContainer,
+  isInsideContainerSync,
+} from '@parity/product-sdk-host';
+import { ss58ToH160 } from '@parity/product-sdk-address';
+import { AccountId } from '@polkadot-api/substrate-bindings';
+import type { PolkadotSigner } from 'polkadot-api';
 import { CONFIG } from './config';
 
 export { getHostProvider };
 
+type AccountsProvider = NonNullable<Awaited<ReturnType<typeof getAccountsProvider>>>;
+
 export interface HostAccount {
-  /** SS58 address (generic prefix 42). */
+  /** SS58 address (generic prefix 42) — the caller origin for contract calls. */
   address: string;
   /** H160 EVM address — the pallet-revive / leaderboard contract identity. */
   h160Address: string;
-  /** PoP username (e.g. "daemiadot") when the host surfaced one, else null. */
+  /** PoP username (e.g. "daemiadot"), if the host surfaced one. */
   name: string | null;
   publicKey: Uint8Array;
+  /** Host signer for this account (routes through the host's tx-create path). */
+  signer: PolkadotSigner;
 }
 
-// The dotli host binds each product to a DotNS identifier; signing fails with
-// PermissionDenied if the signer's identifier doesn't match the URL the host
-// loaded. Derive it from the URL so the same build works under localhost,
-// `<name>.dot`, `<name>.dot.li`, `<name>.paseo.li`, and `<sub>.<name>` previews.
+const accountIdCodec = AccountId(42);
+
+// Derive the app's DotNS identifier from the URL so the same build works under
+// localhost, <name>.dot, <name>.dot.li, <name>.paseo.li and preview subnames.
 // Ported from dotli-starter's deriveSelfDotNs().
 export function deriveSelfDotNs(): string {
   if (typeof window === 'undefined') return CONFIG.appDotNs;
   const hostname = window.location.hostname.toLowerCase();
-  if (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.endsWith('.localhost')
-  ) {
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost')) {
     return CONFIG.appDotNs;
   }
   if (hostname.endsWith('.dot')) {
     const segments = hostname.split('.');
     return segments.length > 2 ? segments.slice(-2).join('.') : hostname;
   }
-  // Gateway form: <label...>.<gateway-tld> e.g. playthrees33.paseo.li → playthrees33.dot
   const segments = hostname.split('.');
   if (segments.length >= 3) {
     let label = segments.slice(0, -2);
@@ -62,18 +64,12 @@ export function deriveSelfDotNs(): string {
 
 export const SELF_DOTNS = deriveSelfDotNs();
 
-// Single shared SignerManager. `connect()` establishes the host session
-// (legacy-accounts handshake) and requests the `ChainSubmit` permission by
-// default; we then resolve our app-scoped product account via
-// `getProductAccount(SELF_DOTNS)`, whose `name` is the user's PoP username.
-export const signerManager = new SignerManager({
-  ss58Prefix: 42,
-  dappName: 'thr33s',
-});
+let providerPromise: Promise<AccountsProvider | null> | null = null;
+function getProvider(): Promise<AccountsProvider | null> {
+  if (!providerPromise) providerPromise = getAccountsProvider();
+  return providerPromise;
+}
 
-// Sync host detection for UI rendering (labels, gating). The SDK's async
-// `isInsideContainer()` is authoritative; this mirrors its heuristic
-// (desktop sets __HOST_WEBVIEW_MARK__, web loads us in an iframe).
 export function isInHost(): boolean {
   try {
     return isInsideContainerSync();
@@ -83,70 +79,123 @@ export function isInHost(): boolean {
     try {
       return window !== window.top;
     } catch {
-      return true; // cross-origin iframe access throws → we're in a host
+      return true;
     }
   }
 }
 
-function toHostAccount(account: SignerAccount): HostAccount {
-  return {
-    address: account.address,
-    h160Address: account.h160Address,
-    name: account.name,
-    publicKey: account.publicKey,
-  };
-}
-
-// Resolve this app's product account (must be called after a successful
-// connect()). `name` is the user's PoP username, populated best-effort by the
-// SDK from getUserId().primaryUsername.
-async function resolveProductAccount(): Promise<HostAccount | null> {
-  const res = await signerManager.getProductAccount(SELF_DOTNS, 0);
-  if (!res.ok) {
-    console.warn('[host] getProductAccount failed:', res.error);
-    return null;
+// Grant the host ChainSubmit permission — without it the host silently rejects
+// every signing request (and the mobile prompt never reaches the device).
+async function requestChainSubmit(): Promise<void> {
+  try {
+    const truApi = await getTruApi();
+    if (!truApi) return;
+    const res = await truApi.permission({ tag: 'v1', value: { tag: 'ChainSubmit', value: undefined } });
+    res.match(
+      (r: { value: unknown }) => console.log('[host] ChainSubmit →', r.value),
+      (e: { value?: { name?: string } }) => console.warn('[host] ChainSubmit failed:', e?.value?.name ?? e),
+    );
+  } catch (error) {
+    console.warn('[host] ChainSubmit threw:', error);
   }
-  return toHostAccount(res.value);
 }
 
-// Connect to the host and resolve the product account. Returns null when not
-// in a host, or when the host has no active session yet (user not signed in).
+// Derive this app's product account (must be called once the host session is
+// up). Returns null if the user isn't signed in / the host can't derive it.
+async function fetchProductAccount(provider: AccountsProvider): Promise<HostAccount | null> {
+  // Session handshake — tolerate zero legacy accounts (PoP-only users have none).
+  try {
+    await provider.getLegacyAccounts().match(
+      (legacy: unknown[]) => console.log('[host] session ready, legacy accounts:', legacy.length),
+      (e: unknown) => console.warn('[host] getLegacyAccounts failed (ignored):', e),
+    );
+  } catch (e) {
+    console.warn('[host] getLegacyAccounts threw (ignored):', e);
+  }
+
+  let raw: { publicKey: Uint8Array; name?: string } | null = null;
+  await provider.getProductAccount(SELF_DOTNS, 0).match(
+    (account: { publicKey: Uint8Array; name?: string }) => {
+      raw = account;
+    },
+    (e: { name?: string }) => console.warn('[host] getProductAccount failed:', e?.name ?? e),
+  );
+  if (!raw) return null;
+  const account = raw as { publicKey: Uint8Array; name?: string };
+
+  const signer = provider.getProductAccountSigner({
+    dotNsIdentifier: SELF_DOTNS,
+    derivationIndex: 0,
+    publicKey: account.publicKey,
+  });
+  const address = accountIdCodec.dec(account.publicKey);
+  const h160Address = ss58ToH160(address);
+
+  let name: string | null = account.name ?? null;
+  try {
+    const getUserId = (provider as { getUserId?: () => { match: (ok: (u: { primaryUsername?: string }) => void, err: (e: unknown) => void) => Promise<void> } }).getUserId;
+    if (typeof getUserId === 'function') {
+      await getUserId.call(provider).match(
+        (u: { primaryUsername?: string }) => {
+          if (u?.primaryUsername) name = u.primaryUsername;
+        },
+        () => {},
+      );
+    }
+  } catch {
+    // keep account.name fallback
+  }
+
+  console.log('[host] product account ready:', name ?? address);
+  return { address, h160Address, name, publicKey: account.publicKey, signer };
+}
+
+// Connect to the host. Returns null when not in a host or the user isn't
+// signed in. Requests ChainSubmit before deriving the account.
 export async function connectHost(): Promise<HostAccount | null> {
   try {
-    const result = await signerManager.connect();
-    if (!result.ok) {
-      console.warn('[host] SignerManager.connect failed:', result.error);
+    if (!(await isInsideContainer())) return null;
+    const provider = await getProvider();
+    if (!provider) {
+      console.warn('[host] getAccountsProvider returned null');
       return null;
     }
-    const account = await resolveProductAccount();
-    if (account) console.log('[host] connected:', account.name ?? account.address);
-    return account;
+    await requestChainSubmit();
+    return await fetchProductAccount(provider);
   } catch (error) {
     console.warn('[host] connectHost threw:', error);
     return null;
   }
 }
 
-// Subscribe to host connection-status changes so a sign-in that happens after
-// our initial attempt (e.g. user signs in via the topbar) is picked up. Only
-// acts on transitions to avoid re-firing on every state mutation while
-// connected.
+// Subscribe to host connection-status changes so a sign-in that lands after our
+// initial attempt is picked up. Only acts on status transitions.
 export function subscribeHostConnection(
   onConnect: (account: HostAccount) => void,
   onDisconnect: () => void,
 ): () => void {
+  let unsub: () => void = () => {};
   let lastStatus: string | null = null;
-  return signerManager.subscribe((state) => {
-    if (state.status === lastStatus) return;
-    lastStatus = state.status;
-    if (state.status === 'connected') {
-      void resolveProductAccount().then((account) => {
+  void getProvider().then((provider) => {
+    if (!provider) return;
+    const sub = provider.subscribeAccountConnectionStatus(async (status: string) => {
+      if (status === lastStatus) return;
+      lastStatus = status;
+      if (status === 'connected') {
+        const account = await fetchProductAccount(provider);
         if (account) onConnect(account);
-      });
-    } else if (state.status === 'disconnected') {
-      onDisconnect();
-    }
+      } else if (status === 'disconnected') {
+        onDisconnect();
+      }
+    });
+    unsub =
+      typeof sub === 'function'
+        ? sub
+        : sub && typeof (sub as { unsubscribe?: () => void }).unsubscribe === 'function'
+          ? () => (sub as { unsubscribe: () => void }).unsubscribe()
+          : () => {};
   });
+  return () => unsub();
 }
 
 export function truncateAddress(address: string): string {

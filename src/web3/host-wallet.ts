@@ -16,6 +16,7 @@ import {
   getHostProvider,
   isInsideContainer,
   isInsideContainerSync,
+  requestResourceAllocation,
 } from '@parity/product-sdk-host';
 import { ss58ToH160 } from '@parity/product-sdk-address';
 import { AccountId } from '@polkadot-api/substrate-bindings';
@@ -100,6 +101,28 @@ async function requestChainSubmit(): Promise<void> {
   }
 }
 
+// Request the host to provision a SmartContract (PGAS) allowance. This is the
+// step that maps a Proof-of-Personhood product account without any PAS funding:
+// the host mints PGAS to the product account on Asset Hub, which creates +
+// auto-maps it, and authorises the AsPgas fee extension so the leaderboard's
+// Revive calls are gas-sponsored. AutoSigning lets the host sign without a
+// prompt per move. Outcomes are advisory (NotAvailable is non-fatal — picked up
+// once the host supports it). Mirrors festival's claimAllowances().
+async function requestAllowances(): Promise<void> {
+  try {
+    const resources = [
+      { tag: 'SmartContractAllowance', value: 0 },
+      { tag: 'AutoSigning', value: undefined },
+    ] as unknown as Parameters<typeof requestResourceAllocation>[0];
+    const outcomes = await requestResourceAllocation(resources);
+    outcomes?.forEach?.((o: { tag?: string }, i: number) =>
+      console.log('[host] allocation', i, '→', o?.tag),
+    );
+  } catch (error) {
+    console.warn('[host] requestResourceAllocation failed (ignored):', error);
+  }
+}
+
 // Derive this app's product account (must be called once the host session is
 // up). Returns null if the user isn't signed in / the host can't derive it.
 async function fetchProductAccount(provider: AccountsProvider): Promise<HostAccount | null> {
@@ -161,6 +184,9 @@ export async function connectHost(): Promise<HostAccount | null> {
       return null;
     }
     await requestChainSubmit();
+    // Provision the PGAS/SmartContract allowance: maps the product account
+    // (no PAS funding) and sponsors the leaderboard's Revive gas.
+    await requestAllowances();
     return await fetchProductAccount(provider);
   } catch (error) {
     console.warn('[host] connectHost threw:', error);

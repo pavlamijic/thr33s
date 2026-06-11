@@ -40,9 +40,11 @@ export const CONFIG = {
   contractAddress: '0xa63df27cdea854535612a5deff044e2075716d89' as `0x${string}`,
 
   // Origin used for read-only contract dry-runs when no user is connected
-  // (e.g. viewing the leaderboard before sign-in). Any valid AccountId works
-  // for a view call — this is the well-known //Alice address.
-  readOrigin: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+  // (e.g. viewing the leaderboard before sign-in). pallet-revive's own pallet
+  // account — always exists on chain, so the dry-run never fails for an
+  // unmapped/absent origin. Bytes "modlpy/reviv" + zero padding, SS58 prefix 42
+  // (per product-sdk PR #152, mirrors Pallet::<T>::account_id()).
+  readOrigin: '5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV',
 
   // App identity. The product account is derived per DotNS name; thr33s is
   // published at playthrees33.dot. `host-wallet.ts` derives this from the URL

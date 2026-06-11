@@ -54,19 +54,28 @@ jobs:
     # reusable workflow is not accessible from here. The npm package is
     # public, so we run it directly and get the same deploy.
     #
-    # Why this fixes the outage: the old dotns-sdk/deploy.yml@main defaulted to
-    # DotNS env `paseo-v2`, which the live dot.li / desktop / app gateways no
-    # longer resolve after the paseo-v2 -> paseo-next-v2 testnet migration —
-    # that's why playthrees33.dot.li went dark. `--env paseo-next-v2` puts the
-    # name back on the chain the gateways read; `--publish` lists it in the
-    # on-chain Publisher registry so it surfaces in the app; `--js-merkle`
-    # does content-addressing in pure JS so no IPFS Kubo binary is needed.
+    # `--env paseo-next-v2` puts the name on the chain the live gateways read
+    # (after the paseo-v2 -> paseo-next-v2 migration); `--js-merkle` does
+    # content-addressing in pure JS so no IPFS Kubo binary is needed.
+    #
+    # `--config bulletin-deploy.config.ts` is what makes Hosts actually launch +
+    # version the app: it publishes the on-chain product manifest (root manifest
+    # on playthrees33.dot + the executable record on app.playthrees33.dot with
+    # appVersion). Without it we'd only set a legacy contenthash, which the host
+    # doesn't version/refresh cleanly. The build is downloaded into ./dist so it
+    # matches the config's executable `path` (reuses the uploaded CID). We
+    # checkout the repo so the config + icon.png are present. (No `--publish`:
+    # that's the optional Publisher *registry* listing, which needs PoP and is
+    # separate from launching the app.)
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
-          path: build
+          path: dist
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -79,4 +88,4 @@ jobs:
       - name: Deploy to DotNS (paseo-next-v2)
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
-        run: bulletin-deploy --js-merkle --env paseo-next-v2 --publish build playthrees33.dot
+        run: bulletin-deploy --js-merkle --env paseo-next-v2 --config bulletin-deploy.config.ts dist playthrees33.dot

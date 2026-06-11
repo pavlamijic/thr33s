@@ -35,9 +35,9 @@ export const CONFIG = {
   blockExplorer: 'https://assethub-paseo.subscan.io/',
 
   // ── Leaderboard contract ──
-  // Thr33sLeaderboard on paseo-next-v2 Asset Hub. Deployed via
-  // `npm run deploy:contract` (scripts/deploy.mjs). REPLACE after deploy.
-  contractAddress: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+  // Thr33sLeaderboard on paseo-next-v2 Asset Hub, deployed 2026-06-11 via
+  // scripts/deploy.mjs (Revive.instantiate_with_code over the substrate WS).
+  contractAddress: '0xa63df27cdea854535612a5deff044e2075716d89' as `0x${string}`,
 
   // Origin used for read-only contract dry-runs when no user is connected
   // (e.g. viewing the leaderboard before sign-in). Any valid AccountId works

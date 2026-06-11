@@ -1,64 +1,54 @@
-// Deploy Thr33sLeaderboard to paseo-next-v2 Asset Hub (pallet-revive) via its
-// EVM ETH-RPC — the path the reference app t3rminal uses on the same chain.
-// Contracts deploy through the eth-rpc (eth_sendRawTransaction create), NOT the
-// substrate `Revive.instantiate_with_code` extrinsic (which the runtime doesn't
-// expose → "Incompatible runtime entry").
+// Deploy Thr33sLeaderboard to paseo-next-v2 Asset Hub (pallet-revive) over the
+// SUBSTRATE WS via PAPI — the method the festival reference app uses on this
+// exact chain (scripts/deploy/deploy-festival.ts). paseo-next-v2 exposes no
+// public EVM eth-rpc, so deployment goes through Revive.instantiate_with_code
+// with a sr25519 signer, not an eth-rpc create.
 //
-// Compiles the Solidity to PolkaVM with @parity/resolc, then deploys with viem
-// using a throwaway ECDSA key (unrelated to any wallet/DotNS account).
+// Compiles to PolkaVM with @parity/resolc, dry-runs ReviveApi.instantiate to
+// size gas + storage and learn the address, then submits instantiate_with_code.
 //
 // Usage:
-//   1. Generate + fund a deployer key (run with no key set):
-//        node scripts/deploy.mjs
-//      → prints a fresh DEPLOYER_PRIVATE_KEY and its 0x address. Save the key,
-//        fund the address with PAS: https://faucet.polkadot.io/?parachain=1500
-//   2. Deploy:
-//        DEPLOYER_PRIVATE_KEY=0x... node scripts/deploy.mjs
-//      → prints the deployed contract address for src/web3/config.ts.
+//   DEPLOYER_SEED="twelve word mnemonic ..." node scripts/deploy.mjs
+//
+// The deployer is sr25519, deploy-only (unrelated to the app's PoP identity).
+// Its SS58 address must hold PAS on paseo-next-v2 Asset Hub — the script prints
+// the address + balance; fund it at https://faucet.polkadot.io/?parachain=1500
+// (autoAccountMapping=true maps it to its H160 on first tx).
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { compile } from '@parity/resolc';
-import { createWalletClient, createPublicClient, http, defineChain } from 'viem';
-import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import { createClient, Binary } from 'polkadot-api';
+import { getWsProvider } from 'polkadot-api/ws';
+import { getPolkadotSigner } from 'polkadot-api/signer';
+import { sr25519CreateDerive } from '@polkadot-labs/hdkd';
+import { entropyToMiniSecret, mnemonicToEntropy } from '@polkadot-labs/hdkd-helpers';
+import { AccountId } from '@polkadot-api/substrate-bindings';
 
-const ETH_RPC = 'https://testnet-passet-hub-eth-rpc.polkadot.io';
-const CHAIN_ID = 420420417;
+const WS_URL = 'wss://paseo-asset-hub-next-rpc.polkadot.io';
 const CONTRACT_NAME = 'Thr33sLeaderboard';
-
-const paseoNextV2 = defineChain({
-  id: CHAIN_ID,
-  name: 'Paseo Next v2 Asset Hub',
-  nativeCurrency: { name: 'Paseo', symbol: 'PAS', decimals: 18 },
-  rpcUrls: { default: { http: [ETH_RPC] } },
-});
+const NATIVE_DECIMALS = 10n; // paseo-next-v2 substrate layer
+const DRY_RUN_DEPOSIT = 50n * 10n ** NATIVE_DECIMALS;
+const GAS_MULTIPLIER = 4n;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SOL_PATH = join(__dirname, '..', 'contracts', `${CONTRACT_NAME}.sol`);
 
-async function main() {
-  const rawKey = process.env.DEPLOYER_PRIVATE_KEY?.trim();
+function jsonSafe(v) {
+  return JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? x.toString() : x));
+}
 
-  // No key → generate one and stop, so the user can save + fund it.
-  if (!rawKey) {
-    const pk = generatePrivateKey();
-    const acct = privateKeyToAccount(pk);
-    console.log('No DEPLOYER_PRIVATE_KEY set — generated a throwaway deployer key.\n');
-    console.log('  DEPLOYER_PRIVATE_KEY =', pk);
-    console.log('  address              =', acct.address);
-    console.log('\nNext:');
-    console.log('  1. Save that key somewhere (it is throwaway, deploy-only).');
-    console.log(`  2. Fund ${acct.address} with PAS:`);
-    console.log('     https://faucet.polkadot.io/?parachain=1500');
-    console.log(`  3. DEPLOYER_PRIVATE_KEY=${pk} node scripts/deploy.mjs`);
-    process.exit(0);
+async function main() {
+  const seed = process.env.DEPLOYER_SEED?.trim();
+  if (!seed) {
+    console.error('ERROR: set DEPLOYER_SEED (a 12/24-word sr25519 mnemonic).');
+    console.error('Its SS58 address must hold PAS on paseo-next-v2; fund at');
+    console.error('https://faucet.polkadot.io/?parachain=1500');
+    process.exit(1);
   }
 
-  const account = privateKeyToAccount(rawKey);
-  console.log('Deployer address:', account.address);
-
-  // 1. Compile Solidity → PolkaVM with resolc.
+  // 1. Compile Solidity → PolkaVM.
   console.log(`Compiling ${CONTRACT_NAME}.sol with resolc…`);
   const key = `${CONTRACT_NAME}.sol`;
   const out = await compile({ [key]: { content: readFileSync(SOL_PATH, 'utf8') } });
@@ -66,44 +56,106 @@ async function main() {
     console.error('resolc errors:', out.errors);
     process.exit(1);
   }
-  const artifact = out.contracts?.[key]?.[CONTRACT_NAME];
-  const abi = artifact.abi;
-  const bytecode = `0x${artifact.evm.bytecode.object.replace(/^0x/, '')}`;
-  console.log(`Compiled. PolkaVM blob: ${(bytecode.length - 2) / 2} bytes`);
+  const code = `0x${out.contracts[key][CONTRACT_NAME].evm.bytecode.object.replace(/^0x/, '')}`;
+  console.log(`Compiled. PolkaVM blob: ${(code.length - 2) / 2} bytes`);
 
-  // 2. Connect + sanity-check the chain.
-  const publicClient = createPublicClient({ chain: paseoNextV2, transport: http(ETH_RPC) });
-  const walletClient = createWalletClient({ account, chain: paseoNextV2, transport: http(ETH_RPC) });
+  // 2. Signer (sr25519 from mnemonic).
+  const keyPair = sr25519CreateDerive(entropyToMiniSecret(mnemonicToEntropy(seed)))('');
+  const signer = getPolkadotSigner(keyPair.publicKey, 'Sr25519', keyPair.sign);
+  const origin = AccountId(42).dec(keyPair.publicKey);
+  console.log('Deployer SS58:', origin);
 
-  const chainId = await publicClient.getChainId();
-  if (chainId !== CHAIN_ID) {
-    console.warn(`Warning: eth_chainId returned ${chainId}, expected ${CHAIN_ID}`);
+  // 3. Connect.
+  console.log(`Connecting to ${WS_URL}…`);
+  const client = createClient(getWsProvider(WS_URL));
+  const api = client.getUnsafeApi();
+  const finalized = await client.getFinalizedBlock();
+  console.log(`Connected. Finalized block #${finalized.number}`);
+
+  try {
+    const acct = await api.query.System.Account.getValue(origin);
+    const free = acct?.data?.free ?? 0n;
+    console.log(`Deployer free balance: ${free}`);
+    if (free === 0n) {
+      console.error(`\nDeployer has no PAS. Fund ${origin} at`);
+      console.error('https://faucet.polkadot.io/?parachain=1500 and re-run.');
+      process.exit(1);
+    }
+  } catch (e) {
+    console.warn('Balance check skipped:', e?.message ?? e);
   }
-  const balance = await publicClient.getBalance({ address: account.address });
-  console.log(`Deployer balance: ${balance} planck`);
-  if (balance === 0n) {
-    console.error(`\nDeployer has no PAS. Fund ${account.address} at`);
-    console.error('https://faucet.polkadot.io/?parachain=1500 and re-run.');
+
+  // 4. Dry-run instantiate to size gas + storage and predict the address.
+  //    No constructor args → empty data, salt undefined. weight_limit (NOT
+  //    gas_limit) is the field name pallet-revive uses, same as Revive.call.
+  console.log('Dry-running ReviveApi.instantiate…');
+  const dryRun = await api.apis.ReviveApi.instantiate(
+    origin,
+    0n,
+    undefined,
+    DRY_RUN_DEPOSIT,
+    { type: 'Upload', value: Binary.fromHex(code) },
+    Binary.fromHex('0x'),
+    undefined,
+  );
+
+  if (!dryRun.result.success) {
+    console.error('Dry-run failed:', jsonSafe(dryRun.result.value));
+    process.exit(1);
+  }
+  if (dryRun.result.value.result?.flags & 1) {
+    console.error('Constructor reverted in dry-run');
     process.exit(1);
   }
 
-  // 3. Deploy (no constructor args).
-  console.log('Deploying…');
-  const hash = await walletClient.deployContract({ abi, bytecode });
-  console.log('Tx hash:', hash);
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  const gasLimit = {
+    ref_time: dryRun.weight_required.ref_time * GAS_MULTIPLIER,
+    proof_size: dryRun.weight_required.proof_size * GAS_MULTIPLIER,
+  };
+  const sd = dryRun.storage_deposit;
+  const storageDepositLimit =
+    sd.type === 'Charge' && sd.value > 0n ? sd.value * GAS_MULTIPLIER : DRY_RUN_DEPOSIT;
+  console.log(`Gas ref_time=${gasLimit.ref_time} proof_size=${gasLimit.proof_size}; storage=${storageDepositLimit}`);
 
-  if (receipt.status !== 'success' || !receipt.contractAddress) {
-    console.error('Deployment failed. Receipt:', receipt);
+  // 5. Submit.
+  console.log('Submitting instantiate_with_code…');
+  const tx = api.tx.Revive.instantiate_with_code({
+    value: 0n,
+    weight_limit: gasLimit,
+    storage_deposit_limit: storageDepositLimit,
+    code: Binary.fromHex(code),
+    data: Binary.fromHex('0x'),
+    salt: undefined,
+  });
+  const result = await tx.signAndSubmit(signer);
+
+  if (!result.ok) {
+    console.error('Deployment failed:', jsonSafe(result.dispatchError));
     process.exit(1);
+  }
+
+  // 6. Extract address from the Instantiated event, fall back to dry-run.
+  let addr;
+  for (const ev of result.events) {
+    if (ev.type === 'Revive' && ev.value?.type === 'Instantiated') {
+      const raw = ev.value.value?.contract;
+      addr = typeof raw === 'string' ? raw : raw?.asHex?.() ?? (raw ? `0x${Buffer.from(raw).toString('hex')}` : undefined);
+      break;
+    }
+  }
+  if (!addr) {
+    const predicted = dryRun.result.value.addr ?? dryRun.result.value.account_id;
+    addr = typeof predicted === 'string' ? predicted : predicted?.asHex?.();
   }
 
   console.log('\n========================================');
   console.log(`${CONTRACT_NAME} deployed!`);
-  console.log('Contract address:', receipt.contractAddress);
+  console.log('Contract address (H160):', addr ?? '(check Instantiated event in explorer)');
   console.log('========================================');
   console.log('Update src/web3/config.ts:');
-  console.log(`  contractAddress: '${receipt.contractAddress}' as \`0x\${string}\`,`);
+  console.log(`  contractAddress: '${addr ?? '0x...'}' as \`0x\${string}\`,`);
+
+  client.destroy();
   process.exit(0);
 }
 

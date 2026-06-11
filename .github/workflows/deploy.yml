@@ -5,11 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      skip-cache:
-        description: 'Skip deployment cache and force redeploy'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -49,15 +44,39 @@ jobs:
   deploy:
     needs: build
     name: Deploy
-    # Canonical maintained workflow — replaces the previous 968-line inline,
-    # whose endpoint defaults and Bulletin/IPFS pipeline drifted out of date.
-    # paritytech/product-infrastructure's deploy-to-triangle.yml is deprecated
-    # and points here. @main tracks fixes; pin to a sha if reproducibility matters.
-    uses: paritytech/dotns-sdk/.github/workflows/deploy.yml@main
-    with:
-      basename: playthrees33
-      mode: production
-      artifact-name: frontend-build
-      skip-cache: ${{ inputs.skip-cache || false }}
-    secrets:
-      dotns-mnemonic: ${{ secrets.MNEMONIC }}
+    runs-on: ubuntu-latest
+    # Publish via the public `bulletin-deploy` npm CLI — the current canonical
+    # app-publish path, matching the festival baseline (paritytech/festival).
+    #
+    # Why the CLI and not paritytech/bulletin-deploy's reusable workflow:
+    # this repo (pavlamijic/thr33s) lives outside the paritytech org, and
+    # bulletin-deploy is a *private* repo — a `uses:` reference to its
+    # reusable workflow is not accessible from here. The npm package is
+    # public, so we run it directly and get the same deploy.
+    #
+    # Why this fixes the outage: the old dotns-sdk/deploy.yml@main defaulted to
+    # DotNS env `paseo-v2`, which the live dot.li / desktop / app gateways no
+    # longer resolve after the paseo-v2 -> paseo-next-v2 testnet migration —
+    # that's why playthrees33.dot.li went dark. `--env paseo-next-v2` puts the
+    # name back on the chain the gateways read; `--publish` lists it in the
+    # on-chain Publisher registry so it surfaces in the app; `--js-merkle`
+    # does content-addressing in pure JS so no IPFS Kubo binary is needed.
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: build
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install bulletin-deploy
+        run: npm install -g bulletin-deploy
+
+      - name: Deploy to DotNS (paseo-next-v2)
+        env:
+          MNEMONIC: ${{ secrets.MNEMONIC }}
+        run: bulletin-deploy --js-merkle --env paseo-next-v2 --publish build playthrees33.dot

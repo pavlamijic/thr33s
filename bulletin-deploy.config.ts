@@ -30,7 +30,7 @@ export default defineConfig({
     {
       kind: 'app',
       path: './dist',
-      appVersion: [0, 1, 1],
+      appVersion: [0, 1, 2],
     },
   ],
 });

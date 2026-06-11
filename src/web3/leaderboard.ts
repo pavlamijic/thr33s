@@ -3,7 +3,7 @@
 // @parity/product-sdk-contracts handle, which resolves the signer + origin from
 // the shared SignerManager. No EVM RPC, no viem, no browser-wallet paths.
 
-import { getLeaderboardContract } from './client';
+import { getLeaderboardContract, ensureAccountMapped } from './client';
 import { walletService } from './wallet';
 
 export type TransactionStatus =
@@ -43,12 +43,17 @@ export class LeaderboardService {
       throw new Error('Not signed in');
     }
 
-    const contract = (await getLeaderboardContract()) as unknown as AnyContract;
-    const opts: TxOpts = {
-      signer: walletService.getSigner(),
-      origin: walletService.getAddress() ?? undefined,
-    };
+    const signer = walletService.getSigner();
+    const address = walletService.getAddress();
+    if (!address) throw new Error('No address');
 
+    const contract = (await getLeaderboardContract()) as unknown as AnyContract;
+
+    // First contract call: map the account to its H160 (one-time). Without it
+    // even the dry-run fails with Revive.AccountUnmapped.
+    await ensureAccountMapped(address, signer, (s) => console.log('[submit] mapping:', s));
+
+    const opts: TxOpts = { signer, origin: address };
     onStatus?.('signing');
     const result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile), opts);
 

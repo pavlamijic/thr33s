@@ -14,14 +14,18 @@ import { getWsProvider } from 'polkadot-api/ws';
 import {
   createContract,
   createContractRuntime,
+  ensureContractAccountMapped,
   type Contract,
   type ContractDef,
 } from '@parity/product-sdk-contracts';
+import type { PolkadotSigner } from 'polkadot-api';
 import { CONFIG } from './config';
 import { LEADERBOARD_ABI } from './abi';
 import { getHostProvider, isInHost } from './host-wallet';
 
 let clientPromise: Promise<PolkadotClient> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let runtime: any = null;
 let contract: Contract<ContractDef> | null = null;
 
 async function getClient(): Promise<PolkadotClient> {
@@ -40,21 +44,42 @@ async function getClient(): Promise<PolkadotClient> {
   return clientPromise;
 }
 
+async function getRuntime() {
+  if (runtime) return runtime;
+  const client = await getClient();
+  // The unsafe API structurally provides tx.Revive.call/map_account,
+  // query.Revive.OriginalAccount and apis.ReviveApi.call — exactly the
+  // ReviveTypedApi surface the runtime needs, without generating descriptors.
+  runtime = createContractRuntime(client.getUnsafeApi() as never);
+  return runtime;
+}
+
 // Lazily build (and cache) the typed-ish leaderboard contract handle. Methods
 // are accessed dynamically (e.g. `contract.submitScore.tx(...)`); the ABI is
 // untyped so call sites cast the handle.
 export async function getLeaderboardContract(): Promise<Contract<ContractDef>> {
   if (contract) return contract;
-  const client = await getClient();
-  // The unsafe API structurally provides tx.Revive.call/map_account,
-  // query.Revive.OriginalAccount and apis.ReviveApi.call — exactly the
-  // ReviveTypedApi surface the runtime needs, without generating descriptors.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const runtime = createContractRuntime(client.getUnsafeApi() as any);
+  const rt = await getRuntime();
   // No signerManager: signer + origin are passed per-call from leaderboard.ts
   // (the connected product account). defaultOrigin covers anonymous reads.
-  contract = createContract(runtime, CONFIG.contractAddress, LEADERBOARD_ABI as never, {
+  contract = createContract(rt, CONFIG.contractAddress, LEADERBOARD_ABI as never, {
     defaultOrigin: CONFIG.readOrigin,
   });
   return contract;
+}
+
+// Map the account to its pallet-revive H160 if it isn't already. Required
+// before any contract call: an unmapped origin makes even the read-only
+// dry-run fail with Revive.AccountUnmapped. Idempotent (no-op once mapped);
+// the first call submits a one-time map_account tx signed by `signer`.
+export async function ensureAccountMapped(
+  ss58Address: string,
+  signer: PolkadotSigner,
+  onStatus?: (status: string) => void,
+): Promise<void> {
+  const rt = await getRuntime();
+  await ensureContractAccountMapped(rt, ss58Address, signer, {
+    timeoutMs: 120_000,
+    onStatus,
+  });
 }

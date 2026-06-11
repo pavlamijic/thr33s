@@ -11,10 +11,9 @@
   },
   "devDependencies": {
     "@parity/resolc": "^1.2.0",
-    "@polkadot-labs/hdkd": "^0.0.26",
-    "@polkadot-labs/hdkd-helpers": "^0.0.27",
     "esbuild": "^0.28.0",
     "typescript": "~5.9.3",
+    "viem": "^2.0.0",
     "vite": "^7.2.4"
   },
   "dependencies": {

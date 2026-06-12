@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 permissions:
@@ -64,9 +66,12 @@ jobs:
     # appVersion). Without it we'd only set a legacy contenthash, which the host
     # doesn't version/refresh cleanly. The build is downloaded into ./dist so it
     # matches the config's executable `path` (reuses the uploaded CID). We
-    # checkout the repo so the config + icon.png are present. (No `--publish`:
-    # that's the optional Publisher *registry* listing, which needs PoP and is
-    # separate from launching the app.)
+    # checkout the repo so the config + icon.png are present.
+    #
+    # `--publish` lists playthrees33.dot in the on-chain Publisher registry so it
+    # surfaces in the host directory (playground.dot). It reverts NoPersonhood
+    # (non-fatal) until the owner `MNEMONIC` account has full Proof-of-Personhood
+    # — see DEPLOY.md §4. Once granted, the next deploy lists the app.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,4 +93,4 @@ jobs:
       - name: Deploy to DotNS (paseo-next-v2)
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
-        run: bulletin-deploy --js-merkle --env paseo-next-v2 --config bulletin-deploy.config.ts dist playthrees33.dot
+        run: bulletin-deploy --js-merkle --env paseo-next-v2 --publish --config bulletin-deploy.config.ts dist playthrees33.dot

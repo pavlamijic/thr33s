@@ -68,10 +68,9 @@ jobs:
     # matches the config's executable `path` (reuses the uploaded CID). We
     # checkout the repo so the config + icon.png are present.
     #
-    # `--publish` lists playthrees33.dot in the on-chain Publisher registry so it
-    # surfaces in the host directory (playground.dot). It reverts NoPersonhood
-    # (non-fatal) until the owner `MNEMONIC` account has full Proof-of-Personhood
-    # — see DEPLOY.md §4. Once granted, the next deploy lists the app.
+    # `--publish` lists playthrees33.dot in the on-chain Publisher registry (host
+    # directory). Non-fatal: it reverts NoPersonhood until the owner `MNEMONIC`
+    # account has full Proof-of-Personhood; the deploy still succeeds.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

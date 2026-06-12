@@ -6,8 +6,10 @@ Web3 Threes — a tile-sliding game where you merge `1 + 2 = 3`, then `3 + 3 = 6
 Thr33s is **Proof-of-Personhood only**: it runs inside the Polkadot host
 (Polkadot app, Polkadot Desktop, or the web at
 [playthrees33.paseo.li](https://playthrees33.paseo.li)) and uses your host
-identity — no browser-extension wallets. Your PoP username (e.g. `daemiadot`)
-is shown in-app and on the leaderboard.
+identity — no browser-extension wallets. Your PoP username is shown in-app and
+on the leaderboard.
+
+![Thr33s gameplay](docs/screenshot.png)
 
 ## How it works
 

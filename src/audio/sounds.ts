@@ -9,21 +9,24 @@ function getAudioContext(): AudioContext {
   return audioContext;
 }
 
-// Resume audio context on user interaction (required by browsers)
+// Resume the audio context on user interaction (browsers start it suspended).
+// Must cover TOUCH/POINTER gestures, not just click/keydown: in the Polkadot
+// mobile app the game is played by swiping, which fires touch/pointer events
+// only — without these the context never resumes and all sounds stay silent.
+// Listeners are passive and idempotent (resume() is a no-op once running), so
+// we leave them attached rather than firing once.
 export function initAudio(): void {
-  document.addEventListener('click', () => {
+  const resume = () => {
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') {
-      ctx.resume();
+      void ctx.resume();
     }
-  }, { once: true });
+  };
 
-  document.addEventListener('keydown', () => {
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
-  }, { once: true });
+  const events = ['pointerdown', 'touchstart', 'touchend', 'keydown', 'click'];
+  for (const event of events) {
+    document.addEventListener(event, resume, { passive: true });
+  }
 }
 
 // Swoosh sound for tile movement

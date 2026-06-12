@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Thr33s - Web3 Threes</title>
+    <script>
+      // Apply the saved theme before first paint (default: dark) to avoid a flash.
+      (function () {
+        try {
+          document.documentElement.setAttribute(
+            'data-theme',
+            localStorage.getItem('thr33s-theme') || 'dark'
+          );
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app">

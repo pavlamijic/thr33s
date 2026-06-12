@@ -338,10 +338,54 @@ function setupHeaderButtons(): void {
   updateWalletButton();
 }
 
+// Theme (dark default). The initial value is applied in index.html before
+// paint; here we just read/flip it and persist.
+const THEME_KEY = 'thr33s-theme';
+type Theme = 'dark' | 'light';
+
+const SUN_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <circle cx="12" cy="12" r="4"/>
+  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+</svg>`;
+const MOON_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+</svg>`;
+
+function getTheme(): Theme {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+
+function setTheme(theme: Theme): void {
+  document.documentElement.setAttribute('data-theme', theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // ignore storage failures (private mode, host sandbox)
+  }
+}
+
 // Set up sound toggle button
 function setupSoundToggle(): void {
   const headerRight = document.querySelector('.header-right');
   if (!headerRight) return;
+
+  // Theme toggle button (dark is default)
+  const themeBtn = document.createElement('button');
+  themeBtn.id = 'theme-toggle';
+  themeBtn.className = 'btn-icon';
+
+  const updateThemeIcon = () => {
+    const dark = getTheme() === 'dark';
+    themeBtn.innerHTML = dark ? MOON_ICON : SUN_ICON;
+    themeBtn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+  };
+
+  themeBtn.onclick = () => {
+    setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+    updateThemeIcon();
+  };
+
+  updateThemeIcon();
 
   // Help button
   const helpBtn = document.createElement('button');
@@ -388,10 +432,13 @@ function setupSoundToggle(): void {
 
   updateSoundIcon();
 
-  // Insert buttons at the beginning of header-right (before leaderboard button)
+  // Insert buttons at the beginning of header-right (before leaderboard button).
+  // Each insertBefore prepends, so the last inserted ends up leftmost →
+  // final order: theme, help, restart, sound, [leaderboard], [wallet].
   headerRight.insertBefore(soundBtn, headerRight.firstChild);
   headerRight.insertBefore(restartBtn, headerRight.firstChild);
   headerRight.insertBefore(helpBtn, headerRight.firstChild);
+  headerRight.insertBefore(themeBtn, headerRight.firstChild);
 }
 
 // Initialize when DOM is ready

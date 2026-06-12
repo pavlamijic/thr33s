@@ -101,6 +101,25 @@ async function requestChainSubmit(): Promise<void> {
   }
 }
 
+// Remember, per account, that we've already requested the allowance — so we
+// don't re-prompt on every refresh. The on-chain grant (PGAS mint + account
+// mapping + AsPgas sponsorship) persists, so a returning user is asked once.
+const allowanceKey = (address: string) => `thr33s-allowance:${address}`;
+function hasGrantedAllowance(address: string): boolean {
+  try {
+    return localStorage.getItem(allowanceKey(address)) === '1';
+  } catch {
+    return false;
+  }
+}
+function markAllowanceGranted(address: string): void {
+  try {
+    localStorage.setItem(allowanceKey(address), '1');
+  } catch {
+    // ignore storage failures
+  }
+}
+
 // Request the host to provision a SmartContract (PGAS) allowance. This is the
 // step that maps a Proof-of-Personhood product account without any PAS funding:
 // the host mints PGAS to the product account on Asset Hub, which creates +
@@ -154,6 +173,14 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
   const address = accountIdCodec.dec(account.publicKey);
   const h160Address = ss58ToH160(address);
 
+  // Provision the PGAS/SmartContract allowance once per account (then skip on
+  // future loads), so the host doesn't pop the "Allowance request" dialog on
+  // every refresh.
+  if (!hasGrantedAllowance(address)) {
+    await requestAllowances();
+    markAllowanceGranted(address);
+  }
+
   let name: string | null = account.name ?? null;
   try {
     const getUserId = (provider as { getUserId?: () => { match: (ok: (u: { primaryUsername?: string }) => void, err: (e: unknown) => void) => Promise<void> } }).getUserId;
@@ -184,9 +211,8 @@ export async function connectHost(): Promise<HostAccount | null> {
       return null;
     }
     await requestChainSubmit();
-    // Provision the PGAS/SmartContract allowance: maps the product account
-    // (no PAS funding) and sponsors the leaderboard's Revive gas.
-    await requestAllowances();
+    // The PGAS/SmartContract allowance is requested inside fetchProductAccount,
+    // gated to once per account (no re-prompt on refresh).
     return await fetchProductAccount(provider);
   } catch (error) {
     console.warn('[host] connectHost threw:', error);

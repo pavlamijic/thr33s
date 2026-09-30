@@ -21,7 +21,7 @@ export interface LeaderboardEntry {
   timestamp: number;
 }
 
-// pallet-revive auto-maps accounts on first tx on paseo-next-v2
+// pallet-revive auto-maps accounts on first tx on devnet
 // (autoAccountMapping: true), so no explicit map_account is needed here.
 type TxOpts = { signer: unknown; origin?: string };
 type AnyContract = Record<string, {

@@ -47,30 +47,23 @@ jobs:
     needs: build
     name: Deploy
     runs-on: ubuntu-latest
-    # Publish via the public `bulletin-deploy` npm CLI — the current canonical
-    # app-publish path, matching the festival baseline (paritytech/festival).
+    # Publish via polkadot-app-deploy (`pad`), the successor to bulletin-deploy
+    # (https://docs.polkadotcommunity.foundation/guides/build-and-publish/).
     #
-    # Why the CLI and not paritytech/bulletin-deploy's reusable workflow:
-    # this repo (pavlamijic/thr33s) lives outside the paritytech org, and
-    # bulletin-deploy is a *private* repo — a `uses:` reference to its
-    # reusable workflow is not accessible from here. The npm package is
-    # public, so we run it directly and get the same deploy.
+    # `--env devnet` targets the Products Devnet (Paseo Asset Hub 1000 /
+    # Bulletin 1010); the name resolves at playthrees33.dev-dot.li. `--js-merkle`
+    # does content-addressing in pure JS so no IPFS Kubo binary is needed.
     #
-    # `--env paseo-next-v2` puts the name on the chain the live gateways read
-    # (after the paseo-v2 -> paseo-next-v2 migration); `--js-merkle` does
-    # content-addressing in pure JS so no IPFS Kubo binary is needed.
-    #
-    # `--config bulletin-deploy.config.ts` is what makes Hosts actually launch +
-    # version the app: it publishes the on-chain product manifest (root manifest
-    # on playthrees33.dot + the executable record on app.playthrees33.dot with
-    # appVersion). Without it we'd only set a legacy contenthash, which the host
-    # doesn't version/refresh cleanly. The build is downloaded into ./dist so it
-    # matches the config's executable `path` (reuses the uploaded CID). We
-    # checkout the repo so the config + icon.png are present.
+    # `--config polkadot-app-deploy.config.ts` publishes the on-chain product
+    # manifest (root manifest on playthrees33.dot + the executable record on
+    # app.playthrees33.dot with appVersion), which is what makes Hosts launch +
+    # version the app. The build is downloaded into ./dist so it matches the
+    # config's executable `path`; we checkout the repo so the config + icon.png
+    # are present.
     #
     # `--publish` lists playthrees33.dot in the on-chain Publisher registry (host
-    # directory). Non-fatal: it reverts NoPersonhood until the owner `MNEMONIC`
-    # account has full Proof-of-Personhood; the deploy still succeeds.
+    # directory). The `MNEMONIC` account registers the name on first deploy, so
+    # it needs PAS on Paseo Asset Hub (faucet.polkadot.io, parachain 1000).
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -86,10 +79,10 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install bulletin-deploy
-        run: npm install -g bulletin-deploy
+      - name: Install polkadot-app-deploy
+        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@latest
 
-      - name: Deploy to DotNS (paseo-next-v2)
+      - name: Deploy to DotNS (devnet)
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
-        run: bulletin-deploy --js-merkle --env paseo-next-v2 --publish --config bulletin-deploy.config.ts dist playthrees33.dot
+        run: pad --js-merkle --env devnet --publish --config polkadot-app-deploy.config.ts dist playthrees33.dot

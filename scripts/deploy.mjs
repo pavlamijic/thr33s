@@ -1,7 +1,6 @@
-// Deploy Thr33sLeaderboard to paseo-next-v2 Asset Hub (pallet-revive) over the
+// Deploy Thr33sLeaderboard to Paseo Asset Hub (devnet, pallet-revive) over the
 // SUBSTRATE WS via PAPI — the method the festival reference app uses on this
-// exact chain (scripts/deploy/deploy-festival.ts). paseo-next-v2 exposes no
-// public EVM eth-rpc, so deployment goes through Revive.instantiate_with_code
+// chain family (scripts/deploy/deploy-festival.ts): Revive.instantiate_with_code
 // with a sr25519 signer, not an eth-rpc create.
 //
 // Compiles to PolkaVM with @parity/resolc, dry-runs ReviveApi.instantiate to
@@ -11,8 +10,8 @@
 //   DEPLOYER_SEED="twelve word mnemonic ..." node scripts/deploy.mjs
 //
 // The deployer is sr25519, deploy-only (unrelated to the app's PoP identity).
-// Its SS58 address must hold PAS on paseo-next-v2 Asset Hub — the script prints
-// the address + balance; fund it at https://faucet.polkadot.io/?parachain=1500
+// Its SS58 address must hold PAS on Paseo Asset Hub — the script prints
+// the address + balance; fund it at https://faucet.polkadot.io/?parachain=1000
 // (autoAccountMapping=true maps it to its H160 on first tx).
 
 import { readFileSync } from 'node:fs';
@@ -26,9 +25,9 @@ import { sr25519CreateDerive } from '@polkadot-labs/hdkd';
 import { entropyToMiniSecret, mnemonicToEntropy } from '@polkadot-labs/hdkd-helpers';
 import { AccountId } from '@polkadot-api/substrate-bindings';
 
-const WS_URL = 'wss://paseo-asset-hub-next-rpc.polkadot.io';
+const WS_URL = 'wss://asset-hub-paseo-rpc.n.dwellir.com';
 const CONTRACT_NAME = 'Thr33sLeaderboard';
-const NATIVE_DECIMALS = 10n; // paseo-next-v2 substrate layer
+const NATIVE_DECIMALS = 10n; // Paseo substrate layer
 const DRY_RUN_DEPOSIT = 50n * 10n ** NATIVE_DECIMALS;
 const GAS_MULTIPLIER = 4n;
 
@@ -43,8 +42,8 @@ async function main() {
   const seed = process.env.DEPLOYER_SEED?.trim();
   if (!seed) {
     console.error('ERROR: set DEPLOYER_SEED (a 12/24-word sr25519 mnemonic).');
-    console.error('Its SS58 address must hold PAS on paseo-next-v2; fund at');
-    console.error('https://faucet.polkadot.io/?parachain=1500');
+    console.error('Its SS58 address must hold PAS on Paseo Asset Hub; fund at');
+    console.error('https://faucet.polkadot.io/?parachain=1000');
     process.exit(1);
   }
 
@@ -78,7 +77,7 @@ async function main() {
     console.log(`Deployer free balance: ${free}`);
     if (free === 0n) {
       console.error(`\nDeployer has no PAS. Fund ${origin} at`);
-      console.error('https://faucet.polkadot.io/?parachain=1500 and re-run.');
+      console.error('https://faucet.polkadot.io/?parachain=1000 and re-run.');
       process.exit(1);
     }
   } catch (e) {

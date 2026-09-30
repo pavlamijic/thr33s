@@ -1,4 +1,4 @@
-// Product manifest for thr33s. Without this file, bulletin-deploy only sets a
+// Product manifest for thr33s. Without this file, polkadot-app-deploy (`pad`) only sets a
 // "legacy contenthash" on playthrees33.dot — no product manifest, no
 // app.playthrees33.dot executable record, no appVersion. First-party Polkadot
 // Hosts (Desktop / Mobile / Web) launch + version a product via the on-chain
@@ -10,14 +10,13 @@
 //
 // Bump `appVersion` on every release so the host detects the new version and
 // refetches. `path` resolves relative to THIS file and MUST match the build dir
-// passed to bulletin-deploy (the CI deploy job downloads the build into ./dist),
+// passed to pad (the CI deploy job downloads the build into ./dist),
 // so the app executable reuses the already-uploaded CID instead of re-uploading.
 //
 // `defineConfig` is just an identity helper for editor hints. We define it
-// locally (not `import { defineConfig } from "bulletin-deploy"`) because
-// bulletin-deploy is only installed globally / via npx at publish time, never in
-// the app's node_modules — importing it would throw at config-load. Pattern
-// copied from paritytech/t3rminal's bulletin-deploy.config.ts.
+// locally (not imported from the pad package) because pad is only installed
+// globally at publish time, never in the app's node_modules — importing it
+// would throw at config-load. Pattern copied from paritytech/t3rminal.
 const defineConfig = <T>(config: T): T => config;
 
 export default defineConfig({
@@ -30,7 +29,7 @@ export default defineConfig({
     {
       kind: 'app',
       path: './dist',
-      appVersion: [0, 1, 6],
+      appVersion: [0, 2, 0],
     },
   ],
 });

@@ -216,7 +216,7 @@ async function handleConnectWalletForSubmission(): Promise<boolean> {
 
   if (!isInHost()) {
     showErrorModal(
-      'Open Thr33s in the Polkadot app (or at playthrees33.paseo.li) and sign in to submit your score.',
+      'Open Thr33s in the Polkadot app (or at playthrees33.dev-dot.li) and sign in to submit your score.',
     );
     return false;
   }

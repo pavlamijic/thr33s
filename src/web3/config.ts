@@ -1,43 +1,43 @@
 // Chain + app configuration for thr33s.
 //
 // thr33s runs as a Proof-of-Personhood-only app inside the Polkadot host
-// (dot.li / paseo.li web, polkadot-desktop, Polkadot app). All chain access
+// (dev-dot.li / dot.li web, polkadot-desktop, Polkadot app). All chain access
 // goes over the Substrate WS via PAPI v2 — in a host it's routed through the
 // host sandbox by `getHostProvider(genesisHash)`; standalone it connects
 // directly to `rpcEndpoint` (read-only; signing requires a host).
 //
-// Network: paseo-next-v2 (the testnet the live gateways resolve). Params
-// verified against paritytech/festival packages/shared/host/networks.ts and
-// bulletin-deploy assets/environments.json.
+// Network: `devnet` — the Products Devnet on public Paseo system chains
+// (Asset Hub 1000 / People 1004 / Bulletin 1010), served at <name>.dev-dot.li.
+// Params verified against polkadot-app-deploy assets/environments.json and
+// https://docs.polkadotcommunity.foundation/reference/networks/.
 
 export const CONFIG = {
-  // ── paseo-next-v2 Asset Hub (pallet-revive contracts live here) ──
-  chainName: 'Paseo Next v2 Asset Hub',
+  // ── Paseo Asset Hub (pallet-revive contracts live here) ──
+  chainName: 'Paseo Asset Hub',
 
   // Substrate WebSocket RPC, used by PAPI for the standalone (non-host) path.
-  rpcEndpoint: 'wss://paseo-asset-hub-next-rpc.polkadot.io',
+  rpcEndpoint: 'wss://asset-hub-paseo-rpc.n.dwellir.com',
 
   // Asset Hub genesis hash — handed to `getHostProvider` so the host routes
-  // our RPC to the right chain. This chain has been re-genesised before
-  // (last refreshed 2026-06-01); if the host rejects it as unsupported,
-  // re-sync this hash from festival networks.ts / `bun run sync-network`.
+  // our RPC to the right chain. (Paseo Asset Hub Next was re-genesised in
+  // Sep 2026, which is what broke the old paseo-next-v2 deployment.)
   assetHubGenesisHash:
-    '0xbf0488dbe9daa1de1c08c5f743e26fdc2a4ecd74cf87dd1b4b1eeb99ae4ef19f' as `0x${string}`,
+    '0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2' as `0x${string}`,
 
   // EVM chainId exposed by pallet-revive's eth-rpc (shared across Paseo
   // variants). Kept for reference / explorer links.
   chainId: 420420417,
 
-  // Native token. Substrate layer is 10 decimals on paseo-next-v2.
+  // Native token. Substrate layer is 10 decimals on Paseo.
   currencySymbol: 'PAS',
   currencyDecimals: 10,
 
   blockExplorer: 'https://assethub-paseo.subscan.io/',
 
   // ── Leaderboard contract ──
-  // Thr33sLeaderboard on paseo-next-v2 Asset Hub, deployed 2026-06-11 via
+  // Thr33sLeaderboard on Paseo Asset Hub (devnet), deployed 2026-09-30 via
   // scripts/deploy.mjs (Revive.instantiate_with_code over the substrate WS).
-  contractAddress: '0xa63df27cdea854535612a5deff044e2075716d89' as `0x${string}`,
+  contractAddress: '0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c' as `0x${string}`,
 
   // Origin used for read-only contract dry-runs when no user is connected
   // (e.g. viewing the leaderboard before sign-in). pallet-revive's own pallet

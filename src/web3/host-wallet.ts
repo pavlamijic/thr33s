@@ -1,4 +1,4 @@
-// Polkadot host (dot.li / paseo.li web, polkadot-desktop, Polkadot app)
+// Polkadot host (dev-dot.li / dot.li web, polkadot-desktop, Polkadot app)
 // integration via @parity/product-sdk-host's low-level accounts provider —
 // the dotli-starter pattern (src/main.js), NOT SignerManager.
 //
@@ -12,10 +12,10 @@
 
 import {
   getAccountsProvider,
-  getTruApi,
   getHostProvider,
   isInsideContainer,
   isInsideContainerSync,
+  requestPermission,
   requestResourceAllocation,
 } from '@parity/product-sdk-host';
 import { ss58ToH160 } from '@parity/product-sdk-address';
@@ -42,7 +42,7 @@ export interface HostAccount {
 const accountIdCodec = AccountId(42);
 
 // Derive the app's DotNS identifier from the URL so the same build works under
-// localhost, <name>.dot, <name>.dot.li, <name>.paseo.li and preview subnames.
+// localhost, <name>.dot, <name>.dot.li, <name>.dev-dot.li and preview subnames.
 // Ported from dotli-starter's deriveSelfDotNs().
 export function deriveSelfDotNs(): string {
   if (typeof window === 'undefined') return CONFIG.appDotNs;
@@ -89,13 +89,9 @@ export function isInHost(): boolean {
 // every signing request (and the mobile prompt never reaches the device).
 async function requestChainSubmit(): Promise<void> {
   try {
-    const truApi = await getTruApi();
-    if (!truApi) return;
-    const res = await truApi.permission({ tag: 'v1', value: { tag: 'ChainSubmit', value: undefined } });
-    res.match(
-      (r: { value: unknown }) => console.log('[host] ChainSubmit →', r.value),
-      (e: { value?: { name?: string } }) => console.warn('[host] ChainSubmit failed:', e?.value?.name ?? e),
-    );
+    const res = await requestPermission({ tag: 'ChainSubmit', value: undefined });
+    if (res.ok) console.log('[host] ChainSubmit →', res.value ? 'granted' : 'denied');
+    else console.warn('[host] ChainSubmit failed:', res.error);
   } catch (error) {
     console.warn('[host] ChainSubmit threw:', error);
   }
@@ -129,14 +125,12 @@ function markAllowanceGranted(address: string): void {
 // once the host supports it). Mirrors festival's claimAllowances().
 async function requestAllowances(): Promise<void> {
   try {
-    const resources = [
-      { tag: 'SmartContractAllowance', value: 0 },
+    const res = await requestResourceAllocation([
+      { tag: 'SmartContractAllowance', value: { tag: 'Index', value: 0 } },
       { tag: 'AutoSigning', value: undefined },
-    ] as unknown as Parameters<typeof requestResourceAllocation>[0];
-    const outcomes = await requestResourceAllocation(resources);
-    outcomes?.forEach?.((o: { tag?: string }, i: number) =>
-      console.log('[host] allocation', i, '→', o?.tag),
-    );
+    ]);
+    if (res.ok) res.value.forEach((o, i) => console.log('[host] allocation', i, '→', o));
+    else console.warn('[host] requestResourceAllocation failed (ignored):', res.error);
   } catch (error) {
     console.warn('[host] requestResourceAllocation failed (ignored):', error);
   }
@@ -160,7 +154,7 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
     (account: { publicKey: Uint8Array; name?: string }) => {
       raw = account;
     },
-    (e: { name?: string }) => console.warn('[host] getProductAccount failed:', e?.name ?? e),
+    (e) => console.warn('[host] getProductAccount failed:', e),
   );
   if (!raw) return null;
   const account = raw as { publicKey: Uint8Array; name?: string };

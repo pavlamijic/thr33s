@@ -97,4 +97,8 @@ jobs:
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
           PAD_ENV: ${{ env.NETWORK }}
-        run: pad --js-merkle --env "$NETWORK" --publish --config polkadot-app-deploy.config.ts dist playthrees33
+        # Must match the config's `domain` (TLD per network) or the manifest
+        # publish is rejected.
+        run: |
+          if [ "$NETWORK" = devnet ]; then DOMAIN=playthrees33.dot; else DOMAIN=playthrees33.paseo; fi
+          pad --js-merkle --env "$NETWORK" --publish --config polkadot-app-deploy.config.ts dist "$DOMAIN"

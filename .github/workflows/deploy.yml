@@ -8,12 +8,11 @@ on:
       - '**.md'
   workflow_dispatch:
 
-# Target network. paseo-next-v2 (-> playthrees33.paseo.li) until the devnet
-# Bulletin storage authorization is sorted, then switch to devnet
-# (-> playthrees33.dev-dot.li). The contract address per network lives in
+# Target network: devnet (-> playthrees33.dev-dot.li) or paseo-next-v2
+# (-> playthrees33.paseo.li). The contract address per network lives in
 # src/web3/config.ts.
 env:
-  NETWORK: paseo-next-v2
+  NETWORK: devnet
 
 permissions:
   contents: read

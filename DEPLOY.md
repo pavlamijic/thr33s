@@ -6,8 +6,8 @@ Thr33s is a Proof-of-Personhood-only app that runs inside the Polkadot host
 
 | `NETWORK` | Asset Hub | Name | Web |
 |---|---|---|---|
-| `paseo-next-v2` (current) | Asset Hub Next (1500) | `playthrees33.paseo` | `playthrees33.paseo.li` |
-| `devnet` | Paseo Asset Hub (1000) | `playthrees33.dot` | `playthrees33.dev-dot.li` |
+| `paseo-next-v2` | Asset Hub Next (1500) | `playthrees33.paseo` | `playthrees33.paseo.li` |
+| `devnet` (current) | Paseo Asset Hub (1000) | `playthrees33.dot` | `playthrees33.dev-dot.li` |
 
 See <https://docs.polkadotcommunity.foundation/reference/networks/>. Each
 network has its own leaderboard contract address in `src/web3/config.ts`.

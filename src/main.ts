@@ -15,6 +15,7 @@ import {
   type LeaderboardEntry,
 } from './ui/modals';
 import { walletService } from './web3/wallet';
+import { CONFIG } from './web3/config';
 import { isInHost, truncateAddress } from './web3/host-wallet';
 import { leaderboardService } from './web3/leaderboard';
 import {
@@ -216,7 +217,7 @@ async function handleConnectWalletForSubmission(): Promise<boolean> {
 
   if (!isInHost()) {
     showErrorModal(
-      'Open Thr33s in the Polkadot app (or at playthrees33.dev-dot.li) and sign in to submit your score.',
+      `Open Thr33s in the Polkadot app (or at playthrees33.${CONFIG.webGateway}) and sign in to submit your score.`,
     );
     return false;
   }

@@ -1,9 +1,16 @@
 # Deploying Thr33s
 
 Thr33s is a Proof-of-Personhood-only app that runs inside the Polkadot host
-(Polkadot app, Polkadot Desktop, and the web at `playthrees33.dev-dot.li`). It
-targets the **devnet** environment (Paseo Asset Hub 1000 / Bulletin 1010) —
-see <https://docs.polkadotcommunity.foundation/reference/networks/>.
+(Polkadot app, Polkadot Desktop, and the web). The target network is the
+`NETWORK` value at the top of `.github/workflows/deploy.yml`:
+
+| `NETWORK` | Asset Hub | Name | Web |
+|---|---|---|---|
+| `paseo-next-v2` (current) | Asset Hub Next (1500) | `playthrees33.paseo` | `playthrees33.paseo.li` |
+| `devnet` | Paseo Asset Hub (1000) | `playthrees33.dot` | `playthrees33.dev-dot.li` |
+
+See <https://docs.polkadotcommunity.foundation/reference/networks/>. Each
+network has its own leaderboard contract address in `src/web3/config.ts`.
 
 Two things get deployed:
 
@@ -19,29 +26,35 @@ The contract is deployed over the **substrate WS** via `pallet-revive`.
 
 ```bash
 # DEPLOYER_SEED = a funded sr25519 mnemonic (deploy-only; unrelated to players).
-# Fund its SS58 address with PAS: https://faucet.polkadot.io/?parachain=1000
-DEPLOYER_SEED="your funded sr25519 mnemonic" npm run deploy:contract
+# Fund its SS58 address with PAS on the target Asset Hub (the script prints the
+# faucet link: parachain 1500 for paseo-next-v2, 1000 for devnet).
+NETWORK=paseo-next-v2 DEPLOYER_SEED="your funded sr25519 mnemonic" npm run deploy:contract
 ```
 
 `scripts/deploy.mjs` compiles the contract to PolkaVM with `@parity/resolc`,
 dry-runs `ReviveApi.instantiate` to size gas, then submits
 `Revive.instantiate_with_code` and prints the contract address. Paste that
-address into `src/web3/config.ts` → `contractAddress`.
+address into `src/web3/config.ts` → `NETWORKS[<network>].contractAddress`.
 
-> Current deployment (devnet): `0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c`.
+> Current deployments: devnet and paseo-next-v2 both at
+> `0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c` (same deployer + nonce on each
+> chain, so the derived address matches).
 
 ## 2. Deploy the frontend (on push to `main`)
 
 `.github/workflows/deploy.yml` builds `dist` and runs:
 
 ```
-pad --js-merkle --env devnet --publish \
-  --config polkadot-app-deploy.config.ts dist playthrees33.dot
+pad --js-merkle --env "$NETWORK" --publish \
+  --config polkadot-app-deploy.config.ts dist playthrees33
 ```
 
 Requires repo secret **`MNEMONIC`** — the sr25519 seed that **owns
 `playthrees33.dot`** (signs the DotNS writes). On first deploy pad registers
-the name with this account, so it needs PAS on Paseo Asset Hub.
+the name with this account, and it uploads the files to Bulletin itself, so it
+needs PAS on that network's Asset Hub **and** a storage authorization on that
+network's Bulletin chain (<https://paritytech.github.io/polkadot-bulletin-chain/authorizations>,
+pick the matching network).
 
 ### The product manifest (`polkadot-app-deploy.config.ts`) — required
 
@@ -71,5 +84,5 @@ the product account → creates + auto-maps it on Asset Hub → and authorises
 
 ## URLs
 
-- Web: <https://playthrees33.dev-dot.li>
-- Desktop / app: `playthrees33.dot`
+- Web: <https://playthrees33.paseo.li> (paseo-next-v2) / <https://playthrees33.dev-dot.li> (devnet)
+- Desktop / app: `playthrees33.paseo` / `playthrees33.dot`

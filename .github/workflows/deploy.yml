@@ -8,6 +8,13 @@ on:
       - '**.md'
   workflow_dispatch:
 
+# Target network. paseo-next-v2 (-> playthrees33.paseo.li) until the devnet
+# Bulletin storage authorization is sorted, then switch to devnet
+# (-> playthrees33.dev-dot.li). The contract address per network lives in
+# src/web3/config.ts.
+env:
+  NETWORK: paseo-next-v2
+
 permissions:
   contents: read
   statuses: write
@@ -34,6 +41,8 @@ jobs:
         run: npm install
 
       - name: Build app
+        env:
+          VITE_NETWORK: ${{ env.NETWORK }}
         run: npm run build
 
       - name: Upload build artifact
@@ -50,20 +59,22 @@ jobs:
     # Publish via polkadot-app-deploy (`pad`), the successor to bulletin-deploy
     # (https://docs.polkadotcommunity.foundation/guides/build-and-publish/).
     #
-    # `--env devnet` targets the Products Devnet (Paseo Asset Hub 1000 /
-    # Bulletin 1010); the name resolves at playthrees33.dev-dot.li. `--js-merkle`
+    # `--env $NETWORK` picks the environment: devnet (Paseo Asset Hub 1000 /
+    # Bulletin 1010, playthrees33.dot at dev-dot.li) or paseo-next-v2 (Asset Hub
+    # Next 1500, playthrees33.paseo at paseo.li). `--js-merkle`
     # does content-addressing in pure JS so no IPFS Kubo binary is needed.
     #
     # `--config polkadot-app-deploy.config.ts` publishes the on-chain product
-    # manifest (root manifest on playthrees33.dot + the executable record on
-    # app.playthrees33.dot with appVersion), which is what makes Hosts launch +
+    # manifest (root manifest on the name + the executable record on its app.
+    # subname with appVersion), which is what makes Hosts launch +
     # version the app. The build is downloaded into ./dist so it matches the
     # config's executable `path`; we checkout the repo so the config + icon.png
     # are present.
     #
-    # `--publish` lists playthrees33.dot in the on-chain Publisher registry (host
+    # `--publish` lists the name in the on-chain Publisher registry (host
     # directory). The `MNEMONIC` account registers the name on first deploy, so
-    # it needs PAS on Paseo Asset Hub (faucet.polkadot.io, parachain 1000).
+    # it needs PAS on that network's Asset Hub (faucet.polkadot.io) and a
+    # storage authorization on that network's Bulletin chain.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -82,7 +93,8 @@ jobs:
       - name: Install polkadot-app-deploy
         run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@latest
 
-      - name: Deploy to DotNS (devnet)
+      - name: Deploy to DotNS (${{ env.NETWORK }})
         env:
           MNEMONIC: ${{ secrets.MNEMONIC }}
-        run: pad --js-merkle --env devnet --publish --config polkadot-app-deploy.config.ts dist playthrees33.dot
+          PAD_ENV: ${{ env.NETWORK }}
+        run: pad --js-merkle --env "$NETWORK" --publish --config polkadot-app-deploy.config.ts dist playthrees33

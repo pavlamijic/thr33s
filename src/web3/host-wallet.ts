@@ -1,4 +1,4 @@
-// Polkadot host (dev-dot.li / dot.li web, polkadot-desktop, Polkadot app)
+// Polkadot host (paseo.li / dev-dot.li web, polkadot-desktop, Polkadot app)
 // integration via @parity/product-sdk-host's low-level accounts provider —
 // the dotli-starter pattern (src/main.js), NOT SignerManager.
 //
@@ -42,7 +42,7 @@ export interface HostAccount {
 const accountIdCodec = AccountId(42);
 
 // Derive the app's DotNS identifier from the URL so the same build works under
-// localhost, <name>.dot, <name>.dot.li, <name>.dev-dot.li and preview subnames.
+// localhost, <name>.<tld>, <name>.paseo.li, <name>.dev-dot.li and preview subnames.
 // Ported from dotli-starter's deriveSelfDotNs().
 export function deriveSelfDotNs(): string {
   if (typeof window === 'undefined') return CONFIG.appDotNs;
@@ -50,7 +50,7 @@ export function deriveSelfDotNs(): string {
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost')) {
     return CONFIG.appDotNs;
   }
-  if (hostname.endsWith('.dot')) {
+  if (hostname.endsWith(`.${CONFIG.tld}`) || hostname.endsWith('.dot')) {
     const segments = hostname.split('.');
     return segments.length > 2 ? segments.slice(-2).join('.') : hostname;
   }
@@ -58,7 +58,7 @@ export function deriveSelfDotNs(): string {
   if (segments.length >= 3) {
     let label = segments.slice(0, -2);
     if (label[label.length - 1] === 'app') label = label.slice(0, -1);
-    if (label.length > 0) return `${label.join('.')}.dot`;
+    if (label.length > 0) return `${label.join('.')}.${CONFIG.tld}`;
   }
   return CONFIG.appDotNs;
 }

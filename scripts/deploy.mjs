@@ -1,4 +1,4 @@
-// Deploy Thr33sLeaderboard to Paseo Asset Hub (devnet, pallet-revive) over the
+// Deploy Thr33sLeaderboard to an Asset Hub (pallet-revive) over the
 // SUBSTRATE WS via PAPI — the method the festival reference app uses on this
 // chain family (scripts/deploy/deploy-festival.ts): Revive.instantiate_with_code
 // with a sr25519 signer, not an eth-rpc create.
@@ -7,11 +7,12 @@
 // size gas + storage and learn the address, then submits instantiate_with_code.
 //
 // Usage:
-//   DEPLOYER_SEED="twelve word mnemonic ..." node scripts/deploy.mjs
+//   NETWORK=paseo-next-v2|devnet DEPLOYER_SEED="twelve word mnemonic ..." node scripts/deploy.mjs
+// (NETWORK defaults to paseo-next-v2, matching src/web3/config.ts.)
 //
 // The deployer is sr25519, deploy-only (unrelated to the app's PoP identity).
-// Its SS58 address must hold PAS on Paseo Asset Hub — the script prints
-// the address + balance; fund it at https://faucet.polkadot.io/?parachain=1000
+// Its SS58 address must hold PAS on the target Asset Hub — the script prints
+// the address + balance and the faucet link for the chosen network.
 // (autoAccountMapping=true maps it to its H160 on first tx).
 
 import { readFileSync } from 'node:fs';
@@ -25,7 +26,17 @@ import { sr25519CreateDerive } from '@polkadot-labs/hdkd';
 import { entropyToMiniSecret, mnemonicToEntropy } from '@polkadot-labs/hdkd-helpers';
 import { AccountId } from '@polkadot-api/substrate-bindings';
 
-const WS_URL = 'wss://asset-hub-paseo-rpc.n.dwellir.com';
+const NETWORKS = {
+  'paseo-next-v2': { ws: 'wss://paseo-asset-hub-next-rpc.polkadot.io', parachain: 1500 },
+  devnet: { ws: 'wss://asset-hub-paseo-rpc.n.dwellir.com', parachain: 1000 },
+};
+const NETWORK = process.env.NETWORK?.trim() || 'paseo-next-v2';
+if (!NETWORKS[NETWORK]) {
+  console.error(`ERROR: unknown NETWORK "${NETWORK}" (use ${Object.keys(NETWORKS).join(' | ')})`);
+  process.exit(1);
+}
+const WS_URL = NETWORKS[NETWORK].ws;
+const FAUCET_URL = `https://faucet.polkadot.io/?parachain=${NETWORKS[NETWORK].parachain}`;
 const CONTRACT_NAME = 'Thr33sLeaderboard';
 const NATIVE_DECIMALS = 10n; // Paseo substrate layer
 const DRY_RUN_DEPOSIT = 50n * 10n ** NATIVE_DECIMALS;
@@ -42,8 +53,8 @@ async function main() {
   const seed = process.env.DEPLOYER_SEED?.trim();
   if (!seed) {
     console.error('ERROR: set DEPLOYER_SEED (a 12/24-word sr25519 mnemonic).');
-    console.error('Its SS58 address must hold PAS on Paseo Asset Hub; fund at');
-    console.error('https://faucet.polkadot.io/?parachain=1000');
+    console.error(`Its SS58 address must hold PAS on ${NETWORK} Asset Hub; fund at`);
+    console.error(FAUCET_URL);
     process.exit(1);
   }
 
@@ -65,7 +76,7 @@ async function main() {
   console.log('Deployer SS58:', origin);
 
   // 3. Connect.
-  console.log(`Connecting to ${WS_URL}…`);
+  console.log(`Connecting to ${NETWORK} (${WS_URL})…`);
   const client = createClient(getWsProvider(WS_URL));
   const api = client.getUnsafeApi();
   const finalized = await client.getFinalizedBlock();
@@ -77,7 +88,7 @@ async function main() {
     console.log(`Deployer free balance: ${free}`);
     if (free === 0n) {
       console.error(`\nDeployer has no PAS. Fund ${origin} at`);
-      console.error('https://faucet.polkadot.io/?parachain=1000 and re-run.');
+      console.error(`${FAUCET_URL} and re-run.`);
       process.exit(1);
     }
   } catch (e) {
@@ -151,7 +162,7 @@ async function main() {
   console.log(`${CONTRACT_NAME} deployed!`);
   console.log('Contract address (H160):', addr ?? '(check Instantiated event in explorer)');
   console.log('========================================');
-  console.log('Update src/web3/config.ts:');
+  console.log(`Update src/web3/config.ts (NETWORKS['${NETWORK}']):`);
   console.log(`  contractAddress: '${addr ?? '0x...'}' as \`0x\${string}\`,`);
 
   client.destroy();

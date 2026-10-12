@@ -25,9 +25,24 @@ export interface LeaderboardEntry {
 // (autoAccountMapping: true), so no explicit map_account is needed here.
 type TxOpts = { signer: unknown; origin?: string };
 type AnyContract = Record<string, {
-  tx: (...args: unknown[]) => Promise<{ ok?: boolean; txHash?: string; dispatchError?: unknown }>;
+  // product-sdk-contracts returns a Result: { ok: true, value } | { ok: false, error }.
+  tx: (...args: unknown[]) => Promise<
+    { ok: true; value?: { txHash?: string } } | { ok: false; error: unknown }
+  >;
   query: (...args: unknown[]) => Promise<{ success: boolean; value: unknown }>;
 }>;
+
+// Readable message for an SDK error (TxValidityError "…: Invalid.Payment",
+// TxDryRunError revert reason, TxSigningRejectedError, …).
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message || error.name;
+  if (typeof error === 'string') return error;
+  try {
+    return JSON.stringify(error, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    return String(error);
+  }
+}
 
 function num(value: unknown): number {
   return typeof value === 'bigint' ? Number(value) : Number(value ?? 0);
@@ -57,13 +72,14 @@ export class LeaderboardService {
     onStatus?.('signing');
     const result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile), opts);
 
-    if (result && result.ok === false) {
+    if (!result.ok) {
       onStatus?.('failed');
-      throw new Error(`Transaction failed: ${JSON.stringify(result.dispatchError ?? 'unknown')}`);
+      console.error('[submit] tx failed:', result.error);
+      throw new Error(`Transaction failed: ${describeError(result.error)}`);
     }
 
     onStatus?.('finalized');
-    return result?.txHash ?? '';
+    return result.value?.txHash ?? '';
   }
 
   async getTopScores(count: number = 20): Promise<LeaderboardEntry[]> {

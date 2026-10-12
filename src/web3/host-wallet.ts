@@ -183,11 +183,11 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
         (u: { primaryUsername?: string }) => {
           if (u?.primaryUsername) name = u.primaryUsername;
         },
-        () => {},
+        (e: unknown) => console.warn('[host] getUserId failed (showing address instead):', e),
       );
     }
-  } catch {
-    // keep account.name fallback
+  } catch (e) {
+    console.warn('[host] getUserId threw (showing address instead):', e);
   }
 
   console.log('[host] product account ready:', name ?? address);

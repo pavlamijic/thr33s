@@ -7,12 +7,18 @@ on:
     paths-ignore:
       - '**.md'
   workflow_dispatch:
+    inputs:
+      network:
+        description: Target network
+        type: choice
+        options: [devnet, paseo-next-v2]
+        default: devnet
 
 # Target network: devnet (-> playthrees33.dev-dot.li) or paseo-next-v2
-# (-> playthrees33.paseo.li). The contract address per network lives in
-# src/web3/config.ts.
+# (-> playthrees33.paseo.li). Pushes deploy to devnet; run the workflow manually
+# to pick another. The contract address per network lives in src/web3/config.ts.
 env:
-  NETWORK: devnet
+  NETWORK: ${{ inputs.network || 'devnet' }}
 
 permissions:
   contents: read
@@ -20,7 +26,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.ref }}-${{ inputs.network || 'devnet' }}
   cancel-in-progress: true
 
 jobs:

@@ -121,18 +121,26 @@ function markAllowanceGranted(address: string): void {
 // the host mints PGAS to the product account on Asset Hub, which creates +
 // auto-maps it, and authorises the AsPgas fee extension so the leaderboard's
 // Revive calls are gas-sponsored. AutoSigning lets the host sign without a
-// prompt per move. Outcomes are advisory (NotAvailable is non-fatal — picked up
-// once the host supports it). Mirrors festival's claimAllowances().
-async function requestAllowances(): Promise<void> {
+// prompt per move. Mirrors festival's claimAllowances(). Returns the
+// SmartContractAllowance outcome ('Allocated' | 'Rejected' | 'NotAvailable'),
+// or null if the call itself failed.
+export async function requestAllowances(
+  { autoSigning = true }: { autoSigning?: boolean } = {},
+): Promise<string | null> {
   try {
     const res = await requestResourceAllocation([
       { tag: 'SmartContractAllowance', value: { tag: 'Index', value: 0 } },
-      { tag: 'AutoSigning', value: undefined },
+      ...(autoSigning ? [{ tag: 'AutoSigning' as const, value: undefined }] : []),
     ]);
-    if (res.ok) res.value.forEach((o, i) => console.log('[host] allocation', i, '→', o));
-    else console.warn('[host] requestResourceAllocation failed (ignored):', res.error);
+    if (!res.ok) {
+      console.warn('[host] requestResourceAllocation failed:', res.error);
+      return null;
+    }
+    res.value.forEach((o, i) => console.log('[host] allocation', i, '→', o));
+    return res.value[0] ?? null;
   } catch (error) {
-    console.warn('[host] requestResourceAllocation failed (ignored):', error);
+    console.warn('[host] requestResourceAllocation threw:', error);
+    return null;
   }
 }
 
@@ -169,10 +177,11 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
 
   // Provision the PGAS/SmartContract allowance once per account (then skip on
   // future loads), so the host doesn't pop the "Allowance request" dialog on
-  // every refresh.
+  // every refresh. Only remember it once actually Allocated — otherwise a
+  // rejected/unavailable grant would never be retried and every submit fails
+  // with Invalid.Payment.
   if (!hasGrantedAllowance(address)) {
-    await requestAllowances();
-    markAllowanceGranted(address);
+    if ((await requestAllowances()) === 'Allocated') markAllowanceGranted(address);
   }
 
   let name: string | null = account.name ?? null;

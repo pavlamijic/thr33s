@@ -5,6 +5,7 @@
 
 import { getLeaderboardContract, ensureAccountMapped } from './client';
 import { walletService } from './wallet';
+import { requestAllowances } from './host-wallet';
 
 export type TransactionStatus =
   | 'signing'
@@ -70,7 +71,23 @@ export class LeaderboardService {
 
     const opts: TxOpts = { signer, origin: address };
     onStatus?.('signing');
-    const result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile), opts);
+    let result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile), opts);
+
+    // Invalid.Payment = the product account can't pay the fee: its PGAS
+    // allowance was never granted or is used up. Ask the host for it again and
+    // retry once.
+    if (!result.ok && /Payment/.test(describeError(result.error))) {
+      const outcome = await requestAllowances({ autoSigning: false });
+      console.warn('[submit] Invalid.Payment — re-requested allowance:', outcome);
+      if (outcome !== 'Allocated') {
+        onStatus?.('failed');
+        throw new Error(
+          `No gas allowance for this account (host answered: ${outcome ?? 'error'}). ` +
+            'The app could not grant the fee allowance needed to submit.',
+        );
+      }
+      result = await contract.submitScore.tx(BigInt(score), BigInt(highestTile), opts);
+    }
 
     if (!result.ok) {
       onStatus?.('failed');

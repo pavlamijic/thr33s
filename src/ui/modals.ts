@@ -310,6 +310,60 @@ export function showSuccessModal(
   return close;
 }
 
+// Show the signed-in account: name, full address (copyable, e.g. to fund it
+// from a faucet) and a sign-out button.
+export function showAccountModal(
+  name: string | null,
+  address: string,
+  network: string,
+  onSignOut: () => void,
+): ModalCloseCallback {
+  const modalsContainer = document.getElementById('modals')!;
+
+  const overlay = createModalOverlay();
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+
+  modal.innerHTML = `
+    <h2>${name ?? 'Your account'}</h2>
+    <p style="word-break: break-all; user-select: all;">${address}</p>
+    <p style="opacity: 0.7;">Network: ${network}</p>
+    <div class="modal-buttons">
+      <button class="btn btn-primary" id="account-copy-btn">Copy address</button>
+      <button class="btn btn-secondary" id="account-signout-btn">Sign out</button>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  modalsContainer.appendChild(overlay);
+
+  const copyBtn = modal.querySelector<HTMLButtonElement>('#account-copy-btn')!;
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      copyBtn.textContent = 'Copied';
+    } catch {
+      copyBtn.textContent = 'Select the address above to copy';
+    }
+  });
+  modal.querySelector('#account-signout-btn')?.addEventListener('click', () => {
+    close();
+    onSignOut();
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      close();
+    }
+  });
+
+  function close() {
+    overlay.remove();
+  }
+
+  return close;
+}
+
 // Show instructions/help modal
 export function showInstructionsModal(): ModalCloseCallback {
   const modalsContainer = document.getElementById('modals')!;

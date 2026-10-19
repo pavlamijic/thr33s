@@ -12,6 +12,7 @@ import {
   showErrorModal,
   showSuccessModal,
   showInstructionsModal,
+  showAccountModal,
   type LeaderboardEntry,
 } from './ui/modals';
 import { walletService } from './web3/wallet';
@@ -222,21 +223,25 @@ async function handleConnectWalletForSubmission(): Promise<boolean> {
     return false;
   }
 
-  // connectFromHost resolves immediately if a session already exists;
-  // otherwise it leaves a subscription so a later topbar sign-in continues
-  // automatically.
-  console.log('[connect] trying connectFromHost');
-  const alreadyConnected = await walletService.connectFromHost();
-  console.log('[connect] connectFromHost →', alreadyConnected);
-  if (alreadyConnected) return true;
-
-  console.log('[connect] showing sign-in-via-topbar modal');
+  // Show feedback immediately: connectFromHost can take a while (or never
+  // settle) when the host has no session yet. A topbar sign-in that lands
+  // meanwhile emits `connect` via the subscription connectFromHost sets up.
   const closeLoading = showLoadingModal(
     'Sign in with the Polkadot app using the topbar. This will continue automatically once you are signed in.',
   );
-  const connected = await walletService.waitForConnection(120_000);
+  console.log('[connect] trying connectFromHost');
+  const connected = await Promise.race([
+    walletService.connectFromHost().then(
+      (ok) => ok || walletService.waitForConnection(120_000),
+      (error) => {
+        console.warn('[connect] connectFromHost threw:', error);
+        return walletService.waitForConnection(120_000);
+      },
+    ),
+    walletService.waitForConnection(120_000),
+  ]);
   closeLoading();
-  console.log('[connect] waitForConnection →', connected);
+  console.log('[connect] connected →', connected);
 
   if (connected) return true;
   showErrorModal(
@@ -271,7 +276,9 @@ function updateWalletButton(): void {
     walletBtn.title = address ?? '';
     walletBtn.classList.remove('btn-primary');
     walletBtn.classList.add('wallet-connected');
-    walletBtn.onclick = handleDisconnectWallet;
+    walletBtn.onclick = () => {
+      if (address) showAccountModal(name, address, CONFIG.network, handleDisconnectWallet);
+    };
   } else {
     walletBtn.textContent = 'Sign in with Polkadot App';
     walletBtn.title = '';

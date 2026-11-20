@@ -46,6 +46,7 @@ function initializeGame(): void {
   // Initialize audio system
   loadSoundSettings();
   initAudio();
+  markWebHostFrame();
 
   // Set up game event listeners
   gameState.subscribe((event) => {
@@ -138,6 +139,31 @@ function handleMoveEffects(moved: { merged: boolean; value: number }[]): void {
 }
 
 // Handle keyboard input
+// The web host (dev-dot.li / paseo.li) frames the game and floats its top bar
+// over the frame's top edge, hiding our header. Native apps draw their bar
+// outside the webview, so only the web gateway gets the extra top padding.
+function markWebHostFrame(): void {
+  let framed = false;
+  try {
+    framed = window.self !== window.top;
+  } catch {
+    framed = true; // cross-origin access to window.top throws → we're framed
+  }
+  if (!framed) return;
+  const ancestors = (location as Location & { ancestorOrigins?: DOMStringList }).ancestorOrigins;
+  const parent = ancestors?.length ? ancestors[0] : document.referrer;
+  let parentHost = '';
+  try {
+    parentHost = new URL(parent).hostname;
+  } catch {
+    return;
+  }
+  const gateways = ['dev-dot.li', 'paseo.li', CONFIG.webGateway];
+  if (gateways.some((g) => parentHost === g || parentHost.endsWith(`.${g}`))) {
+    document.documentElement.classList.add('web-host-frame');
+  }
+}
+
 function claimKeyboardFocus(): void {
   try {
     window.focus();

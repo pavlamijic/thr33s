@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "deploy:contract": "node scripts/deploy.mjs"
+    "deploy:contract": "node scripts/deploy.mjs",
+    "retire:name": "node scripts/retire-name.mjs"
   },
   "devDependencies": {
     "@parity/resolc": "^1.2.0",

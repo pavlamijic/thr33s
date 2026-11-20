@@ -71,6 +71,11 @@ html, body {
   padding: 16px;
 }
 
+/* Clear the dev-dot.li / paseo.li host top bar, which floats over the frame. */
+.web-host-frame #app {
+  padding-top: 96px;
+}
+
 /* Header */
 .header {
   display: flex;

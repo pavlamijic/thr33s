@@ -24,10 +24,12 @@ const NETWORKS = {
       '0x4349b00e54897e21196fd331015fc5be0f14e118beb0375ed2bb1793737bb57a' as `0x${string}`,
     // Thr33sLeaderboard, deployed 2026-10-05 via scripts/deploy.mjs.
     contractAddress: '0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c' as `0x${string}`,
+    label: 'playthrees33',
     tld: 'paseo',
     webGateway: 'paseo.li',
-    // Fees paid in native PAS (players need PAS on this network).
-    feeAssetId: null as number | null,
+    // Extension pipeline for product-account transactions. Asset Hub Next has
+    // no PGAS fee path, so plain v4 signed txs (players need PAS here).
+    txExtVersion: 0,
   },
   // Products Devnet on public Paseo system chains (Asset Hub 1000 / People
   // 1004 / Bulletin 1010), served at <name>.dev-dot.li.
@@ -38,11 +40,14 @@ const NETWORKS = {
       '0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2' as `0x${string}`,
     // Thr33sLeaderboard, deployed 2026-09-30 via scripts/deploy.mjs.
     contractAddress: '0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c' as `0x${string}`,
+    label: 'playthr33s',
     tld: 'dot',
     webGateway: 'dev-dot.li',
-    // Pay fees in PGAS (Assets id = runtime const Pgas.PgasAssetId). Product
-    // accounts hold PGAS from the host's SmartContractAllowance, not PAS.
-    feeAssetId: 2_000_000_000 as number | null,
+    // Extension pipeline 1 = v5 general tx (VerifyMultiSignature). Only that
+    // pipeline runs ChargePGAS, which burns the product account's PGAS for the
+    // fee; pipeline 0 (v4 signed, the SDK default) always charges PAS, which
+    // product accounts don't hold -> Invalid.Payment.
+    txExtVersion: 1,
   },
 } satisfies Record<NetworkId, unknown>;
 
@@ -70,8 +75,8 @@ export const CONFIG = {
   currencySymbol: 'PAS',
   currencyDecimals: 10,
 
-  // Assets-pallet id of the token fees are paid in (null = native PAS).
-  feeAssetId: NET.feeAssetId,
+  // Transaction-extension pipeline the host signs product-account txs on.
+  txExtVersion: NET.txExtVersion,
 
   blockExplorer: 'https://assethub-paseo.subscan.io/',
 
@@ -88,11 +93,12 @@ export const CONFIG = {
   readOrigin: '5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV',
 
   // App identity. The product account is derived per DotNS name; thr33s is
-  // published as playthrees33.<tld>. `host-wallet.ts` derives this from the URL
+  // published as <label>.<tld>. `host-wallet.ts` derives this from the URL
   // at runtime (so previews work) and falls back to this value.
   tld: NET.tld,
   webGateway: NET.webGateway,
-  appDotNs: `playthrees33.${NET.tld}`,
+  appLabel: NET.label,
+  appDotNs: `${NET.label}.${NET.tld}`,
   appName: 'Thr33s',
 };
 

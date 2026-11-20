@@ -14,7 +14,7 @@ on:
         options: [devnet, paseo-next-v2]
         default: devnet
 
-# Target network: devnet (-> playthrees33.dev-dot.li) or paseo-next-v2
+# Target network: devnet (-> playthr33s.dev-dot.li) or paseo-next-v2
 # (-> playthrees33.paseo.li). Pushes deploy to devnet; run the workflow manually
 # to pick another. The contract address per network lives in src/web3/config.ts.
 env:
@@ -65,7 +65,7 @@ jobs:
     # (https://docs.polkadotcommunity.foundation/guides/build-and-publish/).
     #
     # `--env $NETWORK` picks the environment: devnet (Paseo Asset Hub 1000 /
-    # Bulletin 1010, playthrees33.dot at dev-dot.li) or paseo-next-v2 (Asset Hub
+    # Bulletin 1010, playthr33s.dot at dev-dot.li) or paseo-next-v2 (Asset Hub
     # Next 1500, playthrees33.paseo at paseo.li). `--js-merkle`
     # does content-addressing in pure JS so no IPFS Kubo binary is needed.
     #
@@ -106,5 +106,5 @@ jobs:
         # Must match the config's `domain` (TLD per network) or the manifest
         # publish is rejected.
         run: |
-          if [ "$NETWORK" = devnet ]; then DOMAIN=playthrees33.dot; else DOMAIN=playthrees33.paseo; fi
+          if [ "$NETWORK" = devnet ]; then DOMAIN=playthr33s.dot; else DOMAIN=playthrees33.paseo; fi
           pad --js-merkle --env "$NETWORK" --config polkadot-app-deploy.config.ts dist "$DOMAIN"

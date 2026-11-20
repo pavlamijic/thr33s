@@ -22,7 +22,7 @@ const defineConfig = <T>(config: T): T => config;
 export default defineConfig({
   // TLD is per environment: `.paseo` on paseo-next-v2, `.dot` on devnet. The
   // workflow sets PAD_ENV (which pad also reads as its --env default).
-  domain: process.env.PAD_ENV === 'devnet' ? 'playthrees33.dot' : 'playthrees33.paseo',
+  domain: process.env.PAD_ENV === 'devnet' ? 'playthr33s.dot' : 'playthrees33.paseo',
   displayName: 'Thr33s',
   description:
     'Web3 Threes — slide and merge tiles, then anchor your score on an on-chain leaderboard. Proof-of-Personhood only.',
@@ -31,7 +31,7 @@ export default defineConfig({
     {
       kind: 'app',
       path: './dist',
-      appVersion: [0, 2, 4],
+      appVersion: [0, 2, 5],
     },
   ],
 });

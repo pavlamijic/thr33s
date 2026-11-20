@@ -36,7 +36,7 @@ with your Polkadot identity — no wallet extension, no tokens.
 | Network | Name | Web | Notes |
 |---|---|---|---|
 | **Products Devnet** (current) | `playthr33s.dot` | [playthr33s.dev-dot.li](https://playthr33s.dev-dot.li) | Fees in PGAS — players need nothing. |
-| Paseo Next v2 | `playthrees33.paseo` | [playthrees33.paseo.li](https://playthrees33.paseo.li) | Older deployment; no PGAS fee path, so players need PAS. |
+| Paseo Next v2 | `playthr33s.paseo` | [playthr33s.paseo.li](https://playthr33s.paseo.li) | No PGAS fee path on this network, so players need a little PAS to submit. |
 
 The network is chosen at build time (`VITE_NETWORK`); see
 [`src/web3/config.ts`](src/web3/config.ts).

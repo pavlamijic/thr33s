@@ -1,10 +1,10 @@
 // Product manifest for thr33s. Without this file, polkadot-app-deploy (`pad`) only sets a
-// "legacy contenthash" on playthrees33.dot — no product manifest, no
-// app.playthrees33.dot executable record, no appVersion. First-party Polkadot
+// "legacy contenthash" on playthr33s.dot — no product manifest, no
+// app.playthr33s.dot executable record, no appVersion. First-party Polkadot
 // Hosts (Desktop / Mobile / Web) launch + version a product via the on-chain
 // product manifest (RFC paritytech/triangle-js-sdks 0001-product-manifest):
-//   - root manifest  → playthrees33.dot text-record `manifest` (displayName, icon)
-//   - app executable → app.playthrees33.dot text-record `executable` (appVersion + CID)
+//   - root manifest  → playthr33s.dot text-record `manifest` (displayName, icon)
+//   - app executable → app.playthr33s.dot text-record `executable` (appVersion + CID)
 // Publishing it is parent-authorised text-record / subname writes — it does NOT
 // need Proof-of-Personhood (that only gates the optional Publisher registry).
 //
@@ -22,7 +22,7 @@ const defineConfig = <T>(config: T): T => config;
 export default defineConfig({
   // TLD is per environment: `.paseo` on paseo-next-v2, `.dot` on devnet. The
   // workflow sets PAD_ENV (which pad also reads as its --env default).
-  domain: process.env.PAD_ENV === 'devnet' ? 'playthr33s.dot' : 'playthrees33.paseo',
+  domain: process.env.PAD_ENV === 'devnet' ? 'playthr33s.dot' : 'playthr33s.paseo',
   displayName: 'Thr33s',
   description:
     'Web3 Threes — slide and merge tiles, then anchor your score on an on-chain leaderboard. Proof-of-Personhood only.',
@@ -31,7 +31,7 @@ export default defineConfig({
     {
       kind: 'app',
       path: './dist',
-      appVersion: [0, 2, 9],
+      appVersion: [0, 3, 0],
     },
   ],
 });

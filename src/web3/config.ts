@@ -24,7 +24,7 @@ const NETWORKS = {
       '0x4349b00e54897e21196fd331015fc5be0f14e118beb0375ed2bb1793737bb57a' as `0x${string}`,
     // Thr33sLeaderboard, deployed 2026-10-05 via scripts/deploy.mjs.
     contractAddress: '0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c' as `0x${string}`,
-    label: 'playthrees33',
+    label: 'playthr33s',
     tld: 'paseo',
     webGateway: 'paseo.li',
     // Extension pipeline for product-account transactions. Asset Hub Next has

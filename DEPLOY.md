@@ -7,7 +7,7 @@ to target the other network:
 
 | `NETWORK` | Asset Hub | Name | Web |
 |---|---|---|---|
-| `paseo-next-v2` | Asset Hub Next (1500) | `playthrees33.paseo` | `playthrees33.paseo.li` |
+| `paseo-next-v2` | Asset Hub Next (1500) | `playthr33s.paseo` | `playthr33s.paseo.li` |
 | `devnet` (current) | Paseo Asset Hub (1000) | `playthr33s.dot` | `playthr33s.dev-dot.li` |
 
 See <https://docs.polkadotcommunity.foundation/reference/networks/>. Each
@@ -47,7 +47,7 @@ address into `src/web3/config.ts` → `NETWORKS[<network>].contractAddress`.
 
 ```
 pad --js-merkle --env "$NETWORK" \
-  --config polkadot-app-deploy.config.ts dist playthr33s.dot   # playthrees33.paseo on paseo-next-v2
+  --config polkadot-app-deploy.config.ts dist playthr33s.dot   # playthr33s.paseo on paseo-next-v2
 ```
 
 > **pad is pinned to `@polkadot-community-foundation/polkadot-app-deploy@0.22.1`.**
@@ -105,5 +105,5 @@ need PAS.
 
 ## URLs
 
-- Web: <https://playthrees33.paseo.li> (paseo-next-v2) / <https://playthr33s.dev-dot.li> (devnet)
-- Desktop / app: `playthrees33.paseo` / `playthr33s.dot`
+- Web: <https://playthr33s.paseo.li> (paseo-next-v2) / <https://playthr33s.dev-dot.li> (devnet)
+- Desktop / app: `playthr33s.paseo` / `playthr33s.dot`

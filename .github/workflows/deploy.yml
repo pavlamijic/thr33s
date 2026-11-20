@@ -76,8 +76,9 @@ jobs:
     # config's executable `path`; we checkout the repo so the config + icon.png
     # are present.
     #
-    # `--publish` lists the name in the on-chain Publisher registry (host
-    # directory). The `MNEMONIC` account registers the name on first deploy, so
+    # pad is pinned: an unpinned @latest broke CI when 0.22 dropped `--publish`
+    # (the host-directory listing flag; it was failing on devnet with NotOwner
+    # anyway). The `MNEMONIC` account registers the name on first deploy, so
     # it needs PAS on that network's Asset Hub (faucet.polkadot.io) and a
     # storage authorization on that network's Bulletin chain.
     steps:
@@ -96,7 +97,7 @@ jobs:
           node-version: '22'
 
       - name: Install polkadot-app-deploy
-        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@latest
+        run: npm install -g @parity/polkadot-app-deploy@0.24.0
 
       - name: Deploy to DotNS (${{ env.NETWORK }})
         env:
@@ -106,4 +107,4 @@ jobs:
         # publish is rejected.
         run: |
           if [ "$NETWORK" = devnet ]; then DOMAIN=playthrees33.dot; else DOMAIN=playthrees33.paseo; fi
-          pad --js-merkle --env "$NETWORK" --publish --config polkadot-app-deploy.config.ts dist "$DOMAIN"
+          pad --js-merkle --env "$NETWORK" --config polkadot-app-deploy.config.ts dist "$DOMAIN"

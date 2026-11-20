@@ -22,6 +22,7 @@ import { ss58ToH160 } from '@parity/product-sdk-address';
 import { AccountId } from '@polkadot-api/substrate-bindings';
 import type { PolkadotSigner } from 'polkadot-api';
 import { CONFIG } from './config';
+import { withFeeAsset } from './fee-asset';
 
 export { getHostProvider };
 
@@ -167,11 +168,14 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
   if (!raw) return null;
   const account = raw as { publicKey: Uint8Array; name?: string };
 
-  const signer = provider.getProductAccountSigner({
+  const hostSigner = provider.getProductAccountSigner({
     dotNsIdentifier: SELF_DOTNS,
     derivationIndex: 0,
     publicKey: account.publicKey,
   });
+  // On devnet the product account holds PGAS, not PAS: pay fees in PGAS.
+  const signer =
+    CONFIG.feeAssetId != null ? withFeeAsset(hostSigner, CONFIG.feeAssetId) : hostSigner;
   const address = accountIdCodec.dec(account.publicKey);
   const h160Address = ss58ToH160(address);
 

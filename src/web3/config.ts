@@ -26,6 +26,8 @@ const NETWORKS = {
     contractAddress: '0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c' as `0x${string}`,
     tld: 'paseo',
     webGateway: 'paseo.li',
+    // Fees paid in native PAS (players need PAS on this network).
+    feeAssetId: null as number | null,
   },
   // Products Devnet on public Paseo system chains (Asset Hub 1000 / People
   // 1004 / Bulletin 1010), served at <name>.dev-dot.li.
@@ -38,6 +40,9 @@ const NETWORKS = {
     contractAddress: '0x8b6cdbf8eb3de22910fd3ca98cb8b1fde4c02e0c' as `0x${string}`,
     tld: 'dot',
     webGateway: 'dev-dot.li',
+    // Pay fees in PGAS (Assets id = runtime const Pgas.PgasAssetId). Product
+    // accounts hold PGAS from the host's SmartContractAllowance, not PAS.
+    feeAssetId: 2_000_000_000 as number | null,
   },
 } satisfies Record<NetworkId, unknown>;
 
@@ -64,6 +69,9 @@ export const CONFIG = {
   // Native token. Substrate layer is 10 decimals on Paseo.
   currencySymbol: 'PAS',
   currencyDecimals: 10,
+
+  // Assets-pallet id of the token fees are paid in (null = native PAS).
+  feeAssetId: NET.feeAssetId,
 
   blockExplorer: 'https://assethub-paseo.subscan.io/',
 

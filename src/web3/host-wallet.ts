@@ -22,6 +22,7 @@ import { ss58ToH160 } from '@parity/product-sdk-address';
 import { AccountId } from '@polkadot-api/substrate-bindings';
 import type { PolkadotSigner } from 'polkadot-api';
 import { CONFIG } from './config';
+import { withPipeline1Defaults } from './pipeline1';
 
 export { getHostProvider };
 
@@ -64,6 +65,17 @@ export function deriveSelfDotNs(): string {
 }
 
 export const SELF_DOTNS = deriveSelfDotNs();
+
+// Host errors are plain objects ({ tag, value } / { name, message }); the
+// console shows them as "Object", so serialise them for the log.
+function describeHostError(e: unknown): string {
+  if (e instanceof Error) return `${e.name}: ${e.message}`;
+  try {
+    return JSON.stringify(e, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    return String(e);
+  }
+}
 
 let providerPromise: Promise<AccountsProvider | null> | null = null;
 function getProvider(): Promise<AccountsProvider | null> {
@@ -162,14 +174,14 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
     (account: { publicKey: Uint8Array; name?: string }) => {
       raw = account;
     },
-    (e) => console.warn('[host] getProductAccount failed:', e),
+    (e) => console.warn('[host] getProductAccount failed:', describeHostError(e)),
   );
   if (!raw) return null;
   const account = raw as { publicKey: Uint8Array; name?: string };
 
   // txExtVersion 1 on devnet: the host builds a v5 general tx, whose fee is
   // paid in PGAS (see CONFIG.txExtVersion).
-  const signer = provider.getProductAccountSigner(
+  const hostSigner = provider.getProductAccountSigner(
     {
       dotNsIdentifier: SELF_DOTNS,
       derivationIndex: 0,
@@ -177,6 +189,7 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
     },
     { txExtVersion: CONFIG.txExtVersion },
   );
+  const signer = CONFIG.txExtVersion === 1 ? withPipeline1Defaults(hostSigner) : hostSigner;
   const address = accountIdCodec.dec(account.publicKey);
   const h160Address = ss58ToH160(address);
 

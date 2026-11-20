@@ -76,9 +76,12 @@ jobs:
     # config's executable `path`; we checkout the repo so the config + icon.png
     # are present.
     #
-    # pad is pinned: an unpinned @latest broke CI when 0.22 dropped `--publish`
-    # (the host-directory listing flag; it was failing on devnet with NotOwner
-    # anyway). The `MNEMONIC` account registers the name on first deploy, so
+    # pad is pinned to @polkadot-community-foundation/polkadot-app-deploy 0.22.1:
+    # its devnet DotNS contracts (registry 0xb052…) are the ones the dev-dot.li
+    # gateway and the Polkadot apps resolve. @parity/polkadot-app-deploy 0.24
+    # writes to a newer DotNS deployment (registry 0x527b…) that hosts don't
+    # read yet — names deployed with it show "No app with this name". Re-check
+    # before upgrading. (`--publish` was removed in 0.22.) The `MNEMONIC` account registers the name on first deploy, so
     # it needs PAS on that network's Asset Hub (faucet.polkadot.io) and a
     # storage authorization on that network's Bulletin chain.
     steps:
@@ -97,7 +100,7 @@ jobs:
           node-version: '22'
 
       - name: Install polkadot-app-deploy
-        run: npm install -g @parity/polkadot-app-deploy@0.24.0
+        run: npm install -g @polkadot-community-foundation/polkadot-app-deploy@0.22.1
 
       - name: Deploy to DotNS (${{ env.NETWORK }})
         env:

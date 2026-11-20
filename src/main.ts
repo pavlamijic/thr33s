@@ -83,6 +83,11 @@ function initializeGame(): void {
 
   // Set up keyboard controls
   document.addEventListener('keydown', handleKeyDown);
+  // In a host (dev-dot.li web, Desktop) the game runs in a frame and the host
+  // page keeps keyboard focus, so the first arrow press went to the host. Take
+  // focus on load and again on any click/tap inside the game.
+  claimKeyboardFocus();
+  document.addEventListener('pointerdown', claimKeyboardFocus, { passive: true });
 
   // Set up header buttons
   setupHeaderButtons();
@@ -133,6 +138,14 @@ function handleMoveEffects(moved: { merged: boolean; value: number }[]): void {
 }
 
 // Handle keyboard input
+function claimKeyboardFocus(): void {
+  try {
+    window.focus();
+  } catch {
+    // Some hosts disallow it; a click inside the frame still focuses it.
+  }
+}
+
 function handleKeyDown(e: KeyboardEvent): void {
   // Don't handle game controls when typing in input fields or when modal is open
   const activeElement = document.activeElement;

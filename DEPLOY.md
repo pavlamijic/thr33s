@@ -1,8 +1,9 @@
 # Deploying Thr33s
 
 Thr33s is a Proof-of-Personhood-only app that runs inside the Polkadot host
-(Polkadot app, Polkadot Desktop, and the web). The target network is the
-`NETWORK` value at the top of `.github/workflows/deploy.yml`:
+(Polkadot app, Polkadot Desktop, and the web). Pushes to `main` deploy to
+devnet; run the workflow manually (`gh workflow run deploy.yml -f network=paseo-next-v2`)
+to target the other network:
 
 | `NETWORK` | Asset Hub | Name | Web |
 |---|---|---|---|
@@ -45,12 +46,19 @@ address into `src/web3/config.ts` → `NETWORKS[<network>].contractAddress`.
 `.github/workflows/deploy.yml` builds `dist` and runs:
 
 ```
-pad --js-merkle --env "$NETWORK" --publish \
-  --config polkadot-app-deploy.config.ts dist playthrees33
+pad --js-merkle --env "$NETWORK" \
+  --config polkadot-app-deploy.config.ts dist playthr33s.dot   # playthrees33.paseo on paseo-next-v2
 ```
 
+> **pad is pinned to `@polkadot-community-foundation/polkadot-app-deploy@0.22.1`.**
+> `@parity/polkadot-app-deploy` 0.24 writes devnet names to a newer DotNS
+> deployment (registry `0x527b…`) that the gateway and the Polkadot apps don't
+> resolve yet (they read `0xb052…`) — the app then shows "No app with this
+> name". Re-check before upgrading. (`--publish`, the host-directory listing
+> flag, no longer exists.)
+
 Requires repo secret **`MNEMONIC`** — the sr25519 seed that **owns
-`playthrees33.dot`** (signs the DotNS writes). On first deploy pad registers
+`playthr33s.dot`** (signs the DotNS writes). On first deploy pad registers
 the name with this account, and it uploads the files to Bulletin itself, so it
 needs PAS on that network's Asset Hub **and** a storage authorization on that
 network's Bulletin chain (<https://paritytech.github.io/polkadot-bulletin-chain/authorizations>,
@@ -61,8 +69,8 @@ pick the matching network).
 `--config` is what makes the host *launch + version* the app. It publishes the
 on-chain **product manifest**:
 
-- root manifest on `playthrees33.dot` (display name + icon),
-- an **executable record on `app.playthrees33.dot`** pinning **`appVersion` + CID**.
+- root manifest on `playthr33s.dot` (display name + icon),
+- an **executable record on `app.playthr33s.dot`** pinning **`appVersion` + CID**.
 
 Without it you only set a bare "legacy contenthash", which the host won't
 version/refresh cleanly. **Bump `appVersion` in `polkadot-app-deploy.config.ts` on
@@ -71,14 +79,27 @@ every release** — that's the signal the host uses to pick up a new build.
 Publishing the manifest is parent-authorised text-record / subname writes, so
 it needs **no Proof-of-Personhood**.
 
-## 3. Account mapping — no PAS funding needed
+## 3. Fees: PGAS, not PAS
 
-A PoP product account (`/product/0`) is a soft-derived key, not an Asset Hub
-account, so contract calls first fail with `Revive.AccountUnmapped`. The app
-fixes this at connect time by requesting a **`SmartContractAllowance`** via
-`requestResourceAllocation` (`src/web3/host-wallet.ts`): the host mints PGAS to
-the product account → creates + auto-maps it on Asset Hub → and authorises
-`AsPgas` so the leaderboard's Revive gas is sponsored. No PAS, no Alice funding.
+Players never need PAS on devnet. At sign-in the app requests a
+**`SmartContractAllowance`** (`requestResourceAllocation`, in
+`src/web3/host-wallet.ts`). The host then mints **PGAS** to the player's product
+account and maps it for `pallet-revive`, so there's no `Revive.AccountUnmapped`.
+
+PGAS only pays the fee on **v5 general transactions** (extension pipeline 1),
+where the runtime's `ChargePGAS` burns it (`PgasAllowance.PGASFeePaid`). The
+SDK's default, a v4 signed transaction, is always charged in PAS and fails
+with `Invalid.Payment`. So, per network in `src/web3/config.ts`:
+
+- `txExtVersion: 1` on devnet, so the host signer builds v5 transactions;
+- `src/web3/pipeline1.ts` supplies "off" values for the pipeline-1 extensions
+  that polkadot-api 2.x doesn't fill (`AsScarcity`, `AsPgas`, `AsDotnsGateway`,
+  `RestrictOrigins`). Without them the iOS host refuses to encode the
+  transaction. Newer `product-sdk-host` releases fill these themselves, so drop
+  the file when upgrading.
+
+Paseo Next v2 has no PGAS fee path: there `txExtVersion` stays 0 and players
+need PAS.
 
 ---
 

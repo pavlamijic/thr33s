@@ -1,58 +1,78 @@
 # Thr33s
 
-Web3 Threes — a tile-sliding game where you merge `1 + 2 = 3`, then `3 + 3 = 6`,
-`6 + 6 = 12`, … and anchor your high score on an **on-chain leaderboard**.
+A tile-sliding puzzle game with an **on-chain leaderboard**, built as a Polkadot
+product. Slide the board, merge tiles, and sign your high score to the chain
+with your Polkadot identity — no wallet extension, no tokens.
 
-Thr33s is **Proof-of-Personhood only**: it runs inside the Polkadot host
-(Polkadot app, Polkadot Desktop, or the web at
-[playthrees33.dev-dot.li](https://playthrees33.dev-dot.li)) and uses your host
-identity — no browser-extension wallets. Your PoP username is shown in-app and
-on the leaderboard.
+**▶ Play:** open **`playthr33s.dot`** in the Polkadot app, or on the web at
+**[playthr33s.dev-dot.li](https://playthr33s.dev-dot.li)** (Products Devnet).
 
 ![Thr33s gameplay](docs/screenshot.png)
 
+## How to play
+
+- **Swipe** (touch) or use the **arrow keys** to slide every tile one step.
+- **`1 + 2` make `3`.** From there, only equal tiles merge: `3 + 3 = 6`,
+  `6 + 6 = 12`, `12 + 12 = 24`, …
+- A new tile slides in after every move. The **Next** preview shows what's
+  coming. Once you reach 48, bigger bonus tiles occasionally appear.
+- The game ends when no move is possible. Every tile of 3 or more scores
+  `3^(log2(tile/3) + 1)` — so a 3 is worth 3, a 6 is 9, a 12 is 27, a 24 is 81.
+- Sign in with the Polkadot app to **submit your score**. The top 100 make
+  the leaderboard, and your personal best is kept on-chain.
+
 ## How it works
 
-- **Frontend:** TypeScript + Vite, no framework. Game logic in `src/game/`, UI
-  in `src/ui/`, web3 in `src/web3/`.
-- **Host integration:** [`@parity/product-sdk`](https://github.com/paritytech/product-sdk)
-  (`-host`, `-contracts`, `-address`) + [`polkadot-api`](https://github.com/polkadot-api/polkadot-api)
-  v2. The signing identity is the host **product account**; contract gas is
-  sponsored via a PGAS (`SmartContractAllowance`) allocation — players need no tokens.
-- **Leaderboard:** a `pallet-revive` (PolkaVM) Solidity contract
-  (`contracts/Thr33sLeaderboard.sol`) on the devnet (Paseo) Asset Hub (or Asset Hub Next — see DEPLOY.md). Reads
-  and writes go through the contracts SDK over the substrate WS (no EVM RPC).
-- **Hosting:** the built SPA is published to the Bulletin chain + DotNS as a
-  Polkadot product manifest under `playthrees33.dot`.
+| Piece | What it is |
+|---|---|
+| **Identity** | Thr33s is Proof-of-Personhood only. Inside a Polkadot host (Polkadot app, Desktop, or the dev-dot.li web host) you sign in with your Polkadot app; the game gets a **product account** derived for `playthr33s.dot`, and shows your PoP username (e.g. `daemia.01`). |
+| **Fees (PGAS)** | Players need no PAS. On sign-in the app requests a `SmartContractAllowance`; the host mints **PGAS** (People Gas) to the product account and maps it for contracts. Score submissions are signed as **v5 general transactions** (`txExtVersion: 1`) — the only kind Asset Hub charges in PGAS. |
+| **Leaderboard** | [`contracts/Thr33sLeaderboard.sol`](contracts/Thr33sLeaderboard.sol), a Solidity contract compiled to PolkaVM and running on `pallet-revive` on Paseo Asset Hub. Keeps the top 100 scores (score, highest tile, time) and each player's personal best. |
+| **Hosting** | The built site is stored on the **Bulletin chain** and published under the DotNS name `playthr33s.dot`, with an on-chain product manifest (name, icon, `appVersion`) so hosts can launch and update it. |
+| **Frontend** | TypeScript + Vite, no framework. Chain access via [`polkadot-api`](https://github.com/polkadot-api/polkadot-api) and [`@parity/product-sdk`](https://github.com/paritytech/product-sdk) (`-host`, `-contracts`, `-address`). |
+
+### Networks
+
+| Network | Name | Web | Notes |
+|---|---|---|---|
+| **Products Devnet** (current) | `playthr33s.dot` | [playthr33s.dev-dot.li](https://playthr33s.dev-dot.li) | Fees in PGAS — players need nothing. |
+| Paseo Next v2 | `playthrees33.paseo` | [playthrees33.paseo.li](https://playthrees33.paseo.li) | Older deployment; no PGAS fee path, so players need PAS. |
+
+The network is chosen at build time (`VITE_NETWORK`); see
+[`src/web3/config.ts`](src/web3/config.ts).
 
 ## Develop
 
 ```bash
 npm install
-npm run dev      # local dev server (game works; host features need a host)
-npm run build    # tsc + vite build → dist/
+npm run dev      # local dev server
+npm run build    # typecheck + production build → dist/
 ```
 
-The wallet/leaderboard features only activate inside a Polkadot host. Locally
-you can play the game; to exercise sign-in + score submission, open the
-deployed app in the Polkadot app/desktop or at `playthrees33.dev-dot.li`.
+The game itself works anywhere. Sign-in and score submission need a Polkadot
+host, so test those on the deployed app (Polkadot app, Desktop, or
+dev-dot.li).
 
-## Project layout
+### Project layout
 
 | Path | What |
-|------|------|
-| `src/game/` | Pure game logic (board, tiles, scoring, state) |
-| `src/ui/` | DOM rendering, animations, touch, modals |
-| `src/web3/` | Host connect (`host-wallet.ts`), PAPI client + contract (`client.ts`), leaderboard (`leaderboard.ts`), chain config (`config.ts`) |
+|---|---|
+| `src/game/` | Game logic: board, moves, tile deck, scoring, saved state |
+| `src/ui/` | Rendering, animations, touch input, modals, hints |
+| `src/audio/` | Sound effects (Web Audio) |
+| `src/web3/` | Host sign-in (`host-wallet.ts`), contract client (`client.ts`), leaderboard (`leaderboard.ts`), per-network config (`config.ts`), v5 extension defaults (`pipeline1.ts`) |
 | `contracts/` | `Thr33sLeaderboard.sol` |
-| `scripts/deploy.mjs` | Contract deploy (resolc + PAPI over substrate WS) |
-| `polkadot-app-deploy.config.ts` | Product manifest (display name, icon, app `appVersion`) |
+| `scripts/deploy.mjs` | One-time contract deploy |
+| `polkadot-app-deploy.config.ts` | Product manifest: display name, icon, `appVersion` |
 
 ## Deploy
 
-See **[DEPLOY.md](DEPLOY.md)** — contract deploy, frontend publish, account
-mapping, and getting listed in the host directory.
+Every push to `main` builds the site and publishes it to the Products Devnet
+via GitHub Actions. Bump `appVersion` in `polkadot-app-deploy.config.ts` with
+each release so hosts pick up the new build. Details — contract deployment,
+the CI account, Bulletin storage authorization — are in
+**[DEPLOY.md](DEPLOY.md)**.
 
 ## License
 
-MIT (see `contracts/Thr33sLeaderboard.sol` SPDX header).
+MIT

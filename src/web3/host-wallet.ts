@@ -20,13 +20,14 @@ import {
 } from '@parity/product-sdk-host';
 import { ss58ToH160 } from '@parity/product-sdk-address';
 import { AccountId } from '@polkadot-api/substrate-bindings';
-import type { PolkadotSigner } from 'polkadot-api';
 import { CONFIG } from './config';
-import { withPipeline1Defaults } from './pipeline1';
 
 export { getHostProvider };
 
 type AccountsProvider = NonNullable<Awaited<ReturnType<typeof getAccountsProvider>>>;
+
+/** PAPI 3 tx creator the host builds for the product account (what product-sdk-contracts takes as `signer`). */
+export type HostSigner = ReturnType<AccountsProvider['getProductAccountSigner']>;
 
 export interface HostAccount {
   /** SS58 address (generic prefix 42) — the caller origin for contract calls. */
@@ -37,7 +38,7 @@ export interface HostAccount {
   name: string | null;
   publicKey: Uint8Array;
   /** Host signer for this account (routes through the host's tx-create path). */
-  signer: PolkadotSigner;
+  signer: HostSigner;
 }
 
 const accountIdCodec = AccountId(42);
@@ -180,8 +181,10 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
   const account = raw as { publicKey: Uint8Array; name?: string };
 
   // txExtVersion 1 on devnet: the host builds a v5 general tx, whose fee is
-  // paid in PGAS (see CONFIG.txExtVersion).
-  const hostSigner = provider.getProductAccountSigner(
+  // paid in PGAS (see CONFIG.txExtVersion). Since product-sdk-host 0.3x the
+  // signer fills every extension the chosen pipeline declares (AsPgas,
+  // AsScarcity, ... default to "off"), so no wrapper is needed.
+  const signer = provider.getProductAccountSigner(
     {
       dotNsIdentifier: SELF_DOTNS,
       derivationIndex: 0,
@@ -189,7 +192,6 @@ async function fetchProductAccount(provider: AccountsProvider): Promise<HostAcco
     },
     { txExtVersion: CONFIG.txExtVersion },
   );
-  const signer = CONFIG.txExtVersion === 1 ? withPipeline1Defaults(hostSigner) : hostSigner;
   const address = accountIdCodec.dec(account.publicKey);
   const h160Address = ss58ToH160(address);
 

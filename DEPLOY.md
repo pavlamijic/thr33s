@@ -92,11 +92,10 @@ SDK's default, a v4 signed transaction, is always charged in PAS and fails
 with `Invalid.Payment`. So, per network in `src/web3/config.ts`:
 
 - `txExtVersion: 1` on devnet, so the host signer builds v5 transactions;
-- `src/web3/pipeline1.ts` supplies "off" values for the pipeline-1 extensions
-  that polkadot-api 2.x doesn't fill (`AsScarcity`, `AsPgas`, `AsDotnsGateway`,
-  `RestrictOrigins`). Without them the iOS host refuses to encode the
-  transaction. Newer `product-sdk-host` releases fill these themselves, so drop
-  the file when upgrading.
+- the host signer (`product-sdk-host` ≥ 0.36, polkadot-api 3) fills "off" values
+  for the other pipeline-1 extensions (`AsScarcity`, `AsPgas`, `AsDotnsGateway`,
+  `RestrictOrigins`). Older SDKs needed a hand-written wrapper for this; without
+  those bytes the iOS host refuses to encode the transaction.
 
 Paseo Next v2 has no PGAS fee path: there `txExtVersion` stays 0 and players
 need PAS.

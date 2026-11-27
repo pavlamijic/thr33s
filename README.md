@@ -60,7 +60,7 @@ dev-dot.li).
 | `src/game/` | Game logic: board, moves, tile deck, scoring, saved state |
 | `src/ui/` | Rendering, animations, touch input, modals, hints |
 | `src/audio/` | Sound effects (Web Audio) |
-| `src/web3/` | Host sign-in (`host-wallet.ts`), contract client (`client.ts`), leaderboard (`leaderboard.ts`), per-network config (`config.ts`), v5 extension defaults (`pipeline1.ts`) |
+| `src/web3/` | Host sign-in (`host-wallet.ts`), contract client (`client.ts`), leaderboard (`leaderboard.ts`), per-network config (`config.ts`) |
 | `contracts/` | `Thr33sLeaderboard.sol` |
 | `scripts/deploy.mjs` | One-time contract deploy |
 | `polkadot-app-deploy.config.ts` | Product manifest: display name, icon, `appVersion` |

@@ -2,7 +2,7 @@
 //
 // thr33s runs as a Proof-of-Personhood-only app inside the Polkadot host
 // (paseo.li / dev-dot.li web, polkadot-desktop, Polkadot app). All chain access
-// goes over the Substrate WS via PAPI v2 — in a host it's routed through the
+// goes over the Substrate WS via PAPI v3 — in a host it's routed through the
 // host sandbox by `getHostProvider(genesisHash)`; standalone it connects
 // directly to `rpcEndpoint` (read-only; signing requires a host).
 //

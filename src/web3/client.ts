@@ -1,4 +1,4 @@
-// PAPI v2 client + leaderboard contract handle.
+// PAPI v3 client + leaderboard contract handle.
 //
 // All pallet-revive interaction (dry-run reads + signed writes + account
 // mapping) is delegated to @parity/product-sdk-contracts, which encodes the
@@ -18,10 +18,9 @@ import {
   type Contract,
   type ContractDef,
 } from '@parity/product-sdk-contracts';
-import type { PolkadotSigner } from 'polkadot-api';
 import { CONFIG } from './config';
 import { LEADERBOARD_ABI } from './abi';
-import { getHostProvider, isInHost } from './host-wallet';
+import { getHostProvider, isInHost, type HostSigner } from './host-wallet';
 
 let clientPromise: Promise<PolkadotClient> | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,7 +73,7 @@ export async function getLeaderboardContract(): Promise<Contract<ContractDef>> {
 // the first call submits a one-time map_account tx signed by `signer`.
 export async function ensureAccountMapped(
   ss58Address: string,
-  signer: PolkadotSigner,
+  signer: HostSigner,
   onStatus?: (status: string) => void,
 ): Promise<void> {
   const rt = await getRuntime();
